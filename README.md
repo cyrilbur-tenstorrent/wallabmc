@@ -27,6 +27,7 @@ WallaBMC currently supports the following hardware platforms:
 | --- | --- | --- |
 | **SiFive HiFive Premier P550 MCU** | hifive_premier_p550_mcu | RISC-V based platform |
 | **STM32 Nucleo F767ZI** | nucleo_f767zi | ARM Cortex-M7 development board (standalone, no host CPU) |
+| **Seeed Studio XIAO ESP32-C6** | xiao_esp32c6/esp32c6/hpcore | RISC-V, Wi-Fi 6, on a 21×17.5 mm board with USB-C; BMC console over USB Serial/JTAG (see [below](#seeed-xiao-esp32-c6)) |
 | **qemu** | qemu_cortex_m3 | see [run_qemu_ci.py](scripts/run_qemu_ci.py) |
 
 ### Screenshot
@@ -95,6 +96,15 @@ cd zephyr
 west build -p --sysbuild -b hifive_premier_p550_mcu ../wallabmc
 ```
 
+#### Seeed Studio XIAO ESP32-C6
+```
+# One-time: fetch the Espressif Wi-Fi/PHY binary blobs.
+west blobs fetch hal_espressif
+
+cd zephyr
+west build -p -b xiao_esp32c6/esp32c6/hpcore ../wallabmc
+```
+
 ### Flashing
 
 #### Nucleo F767ZI and P550 MUC:
@@ -110,6 +120,18 @@ flash write_image erase build/mcuboot/zephyr/zephyr.hex
 flash write_image erase build/wallabmc/zephyr/zephyr.signed.hex
 ```
 Also see instructions on [flashing the p550](boards/sifive/hifive_premier_p550_mcu/support/README.md)
+
+#### Seeed Studio XIAO ESP32-C6
+```
+west flash
+```
+
+Alternatively, use the `build/zephyr/zephyr.bin` file and run this
+command:
+
+```
+esptool write-flash 0 zephyr.bin
+```
 
 ### Running
 
