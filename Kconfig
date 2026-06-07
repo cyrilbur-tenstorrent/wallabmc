@@ -386,6 +386,26 @@ config APP_HOST_POWER_FORCE_OFF_MS
 	default 6000
 	depends on APP_HOST_POWER_PULSE
 
+config APP_WIFI
+	bool "Connect to Wi-Fi at boot from BMC config"
+	select WIFI
+	select NET_L2_WIFI_MGMT
+	help
+	  Enable Wi-Fi support. Default SSID and password can be set by
+	  updating config or passing cmdline build options (see README.md).
+	  SSID and password can be changed and persisted in nonvolatile
+	  configuration.
+
+config DEFAULT_WIFI_SSID
+	string "Default WiFi SSID (blank for none)"
+	depends on APP_WIFI
+	default ""
+
+config DEFAULT_WIFI_PASSWORD
+	string "Default WiFi password (blank for none)"
+	depends on APP_WIFI
+	default ""
+
 config JTAG
 	bool "JTAG support"
 	depends on $(dt_path_enabled,/jtag)

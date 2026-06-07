@@ -72,6 +72,12 @@ though there are some particular options for interest.
 `CONFIG_DEFAULT_ADMIN_PASSWORD` - By default a random default admin password is generated
 by the build. This can be overidden.
 
+`CONFIG_DEFAULT_WIFI_SSID` - If the board supports WIFI, provide a default SSID. This can
+be overidden by runtime configuration.
+
+`CONFIG_DEFAULT_WIFI_PASSWORD` - If the board supports WIFI, provide a default passowrd.
+This can be overidden by runtime configuration.
+
 ### Building
 
 To build the application, run the following commands.
