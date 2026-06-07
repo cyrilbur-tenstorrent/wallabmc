@@ -93,6 +93,7 @@ static ssize_t __config_read(uint16_t id, void *buf, size_t size)
 {
 	if (config_use_fs)
 		return fs_key_read(id, buf, size);
+	/* No persistent storage; error return here indicates default must be used. */
 	return -ENODEV;
 }
 
@@ -100,7 +101,8 @@ static ssize_t __config_write(uint16_t id, const void *buf, size_t size)
 {
 	if (config_use_fs)
 		return fs_key_write(id, buf, size);
-	return -ENODEV;
+	/* No persistent storage; caller's RAM copy is the only source of truth. */
+	return size;
 }
 
 #define config_read(id, var)				\
@@ -747,7 +749,16 @@ SHELL_CMD_REGISTER(config, &sub_config_cmds, "Configuration commands", NULL);
 
 int config_clear(void)
 {
-	return fs_clear();
+	/*
+	 * Don't test config_use_fs here (like config_read/config_write do),
+	 * because we want to be able to clear a corrupted config that results
+	 * in config_use_fs == false. fs_enabled() means there is persistent
+	 * storage.
+	 */
+	if (fs_enabled())
+		return fs_clear();
+	/* Nothing to clear if not persistent, succeed. */
+	return 0;
 }
 
 int config_init(void)
@@ -779,7 +790,8 @@ int config_init(void)
 			rc = 0;
 		}
 		if (rc < 0) {
-			LOG_ERR("Config persistent storage failed, continuing with defaults");
+			LOG_ERR("Config persistent storage failed, continuing with defaults.");
+			LOG_ERR("Use 'config clear_and_reboot' or config reset button (if available) to clear stored config.");
 			config_use_fs = false;
 		}
 
