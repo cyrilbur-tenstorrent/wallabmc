@@ -15,6 +15,7 @@
 LOG_MODULE_REGISTER(wallabmc_power);
 
 #include "config.h"
+#include "power.h"
 
 #define GPIO_POWER_1 DT_ALIAS(power_gpio_1)
 #define GPIO_POWER_2 DT_ALIAS(power_gpio_2)
@@ -155,15 +156,14 @@ int reset_init(void)
 		return -1;
 	}
 
-	ret = gpio_pin_configure_dt(&gpio_reset, GPIO_OUTPUT_ACTIVE);
+	/*
+	 * Start inactive so the pin is hi-Z (open-drain) / driven inactive
+	 * at boot. GPIO_OUTPUT_ACTIVE would briefly assert reset to the host
+	 * every time the BMC starts up.
+	 */
+	ret = gpio_pin_configure_dt(&gpio_reset, GPIO_OUTPUT_INACTIVE);
 	if (ret < 0) {
 		LOG_INF("Could not configure reset GPIO\n");
-		return -1;
-	}
-
-	ret = gpio_pin_set_dt(&gpio_reset, 0);
-	if (ret < 0) {
-		LOG_INF("Could not toggle reset GPIO\n");
 		return -1;
 	}
 
