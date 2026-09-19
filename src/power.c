@@ -30,6 +30,13 @@ static const struct gpio_dt_spec power_gpios[] = {
 #endif
 };
 
+static const struct gpio_dt_spec gpio_reset =
+#if DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)
+	GPIO_DT_SPEC_GET(GPIO_RESET, gpios);
+#else
+	{ 0 };
+#endif
+
 static bool system_power_state = false;
 
 bool power_get_state(void)
@@ -44,7 +51,7 @@ static int power_on(void)
 	for (i = 0; i < ARRAY_SIZE(power_gpios); i++) {
 		ret = gpio_pin_set_dt(&power_gpios[i], 1);
 		if (ret < 0) {
-			LOG_INF("Could not toggle power GPIO %d\n", i);
+			LOG_ERR("Could not assert power GPIO %d", i);
 			return -1;
 		}
 	}
@@ -61,7 +68,7 @@ static int power_off(void)
 	for (i = 0; i < ARRAY_SIZE(power_gpios); i++) {
 		ret = gpio_pin_set_dt(&power_gpios[i], 0);
 		if (ret < 0) {
-			LOG_INF("Could not toggle power GPIO %d\n", i);
+			LOG_ERR("Could not deassert power GPIO %d", i);
 			return -1;
 		}
 	}
@@ -71,7 +78,7 @@ static int power_off(void)
 	return 0;
 }
 
-void power_set_state(bool on)
+int power_set_state(bool on)
 {
 	int ret;
 
@@ -82,10 +89,11 @@ void power_set_state(bool on)
 
 	if (ret < 0) {
 		LOG_ERR("Failed to set power state: %d", ret);
-		return;
+		return ret;
 	}
 
 	LOG_INF("System Power State changed to: %s", power_get_state() ? "ON" : "OFF");
+	return 0;
 }
 
 int power_init(void)
@@ -141,13 +149,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_power_cmds,
 );
 
 SHELL_CMD_REGISTER(power, &sub_power_cmds, "Power commands", NULL);
-
-static const struct gpio_dt_spec gpio_reset =
-#if DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)
-	GPIO_DT_SPEC_GET(GPIO_RESET, gpios);
-#else
-	{ 0 };
-#endif
 
 int reset_init(void)
 {
