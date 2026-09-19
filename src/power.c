@@ -105,9 +105,17 @@ int power_init(void)
 		}
 	}
 
+	return 0;
+}
+
+int power_auto_poweron(void)
+{
 	if (config_host_auto_poweron()) {
-		// Power on at BMC boot
-		return power_on();
+		int ret = power_on();
+		if (ret < 0) {
+			LOG_ERR("Auto power-on failed: %d", ret);
+			return ret;
+		}
 	}
 
 	return 0;

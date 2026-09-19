@@ -254,15 +254,32 @@ int main(void)
 		return -1;
 	}
 
-	LOG_DBG("HTTP server init");
-	if (app_http_server_init() < 0) {
-		LOG_ERR("HTTP server init failed");
-		return -1;
-	}
-
 	LOG_DBG("Console logger init");
 	if (console_logger_init() < 0) {
 		LOG_ERR("Console logger init failed");
+		return -1;
+	}
+
+	/*
+	 * Wait until BMC host interfaces such as power, reset, status are
+	 * initialised, host UART logger is running, etc., before host
+	 * auto-poweron.
+	 *
+	 * If auto-poweron fails, a message will be logged. Don't
+	 * fail BMC boot, because the admin may want to diagnose
+	 * and try power cycling etc.
+	 */
+	power_auto_poweron();
+
+	/*
+	 * Interfaces to outside world are brought up after auto poweron, so
+	 * they won't race with one another. The zephyr console interface is
+	 * generally gated by the boot_finished flag so it should not race with
+	 * auto poweron either.
+	 */
+	LOG_DBG("HTTP server init");
+	if (app_http_server_init() < 0) {
+		LOG_ERR("HTTP server init failed");
 		return -1;
 	}
 
