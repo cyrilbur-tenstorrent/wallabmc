@@ -282,5 +282,8 @@ int main(void)
 
 	LOG_INF("BMC boot complete");
 
+	/* Wait until BMC init is done before host poweron */
+	power_auto_poweron();
+
 	return 0;
 }
