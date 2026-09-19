@@ -35,6 +35,7 @@
 
         power-gpio-1 = &dcen;
         power-gpio-2 = &atxpson;
+        power-led = &red_led;
         status-led = &blue_led;
 
 	host-console-uart = &usart6;

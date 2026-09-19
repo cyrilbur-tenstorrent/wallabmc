@@ -20,6 +20,7 @@ LOG_MODULE_REGISTER(wallabmc_power);
 #define GPIO_POWER_1 DT_ALIAS(power_gpio_1)
 #define GPIO_POWER_2 DT_ALIAS(power_gpio_2)
 #define GPIO_RESET DT_ALIAS(reset_gpio_1)
+#define GPIO_POWER_LED  DT_ALIAS(power_led)
 
 static const struct gpio_dt_spec power_gpios[] = {
 #if DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_1)
@@ -29,6 +30,13 @@ static const struct gpio_dt_spec power_gpios[] = {
 	GPIO_DT_SPEC_GET(GPIO_POWER_2, gpios),
 #endif
 };
+
+static const struct gpio_dt_spec power_led_gpio =
+#if DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED)
+	GPIO_DT_SPEC_GET(GPIO_POWER_LED, gpios);
+#else
+	{ 0 };
+#endif
 
 static const struct gpio_dt_spec gpio_reset =
 #if DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)
@@ -56,6 +64,13 @@ static int power_on(void)
 		}
 	}
 
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		/* Don't fail the operation on LED failure */
+		if (gpio_pin_set_dt(&power_led_gpio, 1) < 0)
+			LOG_ERR("Could not assert power LED");
+	}
+
 	system_power_state = true;
 
 	return 0;
@@ -71,6 +86,13 @@ static int power_off(void)
 			LOG_ERR("Could not deassert power GPIO %d", i);
 			return -1;
 		}
+	}
+
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		/* Don't fail the operation on LED failure */
+		if (gpio_pin_set_dt(&power_led_gpio, 0) < 0)
+			LOG_ERR("Could not deassert power LED");
 	}
 
 	system_power_state = false;
@@ -125,6 +147,12 @@ int power_init(void)
 			LOG_INF("Could not configure power GPIO %d\n", i);
 			return -1;
 		}
+	}
+
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		if (gpio_pin_configure_dt(&power_led_gpio, GPIO_OUTPUT_INACTIVE) < 0)
+			LOG_INF("Could not configure power LED\n");
 	}
 
 	return 0;
