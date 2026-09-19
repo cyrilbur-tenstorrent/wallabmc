@@ -1597,7 +1597,7 @@ static int system_reset_post_handler(struct http_resource_user_data *user_data)
 	} else if (strcmp(payload.reset_type, "ForceOff") == 0) {
 		ret = power_set_state(false);
 	} else if (strcmp(payload.reset_type, "PowerCycle") == 0) {
-		ret = power_reset();
+		ret = power_cycle();
 	} else {
 		LOG_ERR("ComputerSystem.Reset: Bad reset type");
 		return HTTP_400_BAD_REQUEST;
