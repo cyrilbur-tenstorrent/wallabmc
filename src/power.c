@@ -100,6 +100,21 @@ static int power_off(void)
 	return 0;
 }
 
+int power_cycle(void)
+{
+	if (system_power_state) {
+		if (power_off() < 0)
+			return -1;
+	}
+
+	k_msleep(2000);
+
+	if (power_on() < 0)
+		return -1;
+
+	return 0;
+}
+
 int power_set_state(bool on)
 {
 	int ret;
