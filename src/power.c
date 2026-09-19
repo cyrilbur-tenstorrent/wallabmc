@@ -20,7 +20,6 @@ LOG_MODULE_REGISTER(wallabmc_power);
 #define GPIO_POWER_1 DT_ALIAS(power_gpio_1)
 #define GPIO_POWER_2 DT_ALIAS(power_gpio_2)
 #define GPIO_RESET DT_ALIAS(reset_gpio_1)
-#define STATUS_LED DT_ALIAS(status_led)
 
 static const struct gpio_dt_spec power_gpios[] = {
 #if DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_1)
@@ -211,95 +210,3 @@ static int cmd_reset(const struct shell *sh, size_t argc, char **argv)
 }
 
 SHELL_CMD_REGISTER(reset, NULL, "Reset.", cmd_reset);
-
-#if DT_NODE_HAS_STATUS_OKAY(STATUS_LED)
-static const struct gpio_dt_spec status_led = GPIO_DT_SPEC_GET(STATUS_LED, gpios);
-
-/* LED blinking thread */
-#define LED_BLINK_STACK_SIZE 256
-#define LED_BLINK_PRIORITY   (CONFIG_NUM_PREEMPT_PRIORITIES - 1)
-#define LED_BLINK_PERIOD_DOT    250
-#define LED_BLINK_PERIOD_DASH   (3 * LED_BLINK_PERIOD_DOT)
-#define LED_BLINK_PERIOD_PAUSE  (LED_BLINK_PERIOD_DOT)
-#define LED_BLINK_PERIOD_LETTER (3 * LED_BLINK_PERIOD_DOT)
-#define LED_BLINK_PERIOD_WORD   (7 * LED_BLINK_PERIOD_DOT)
-
-static K_KERNEL_STACK_DEFINE(led_blink_stack, LED_BLINK_STACK_SIZE);
-static struct k_thread led_blink_thread_data;
-
-static void led_dash(void)
-{
-	gpio_pin_set_dt(&status_led, 1);
-	k_msleep(LED_BLINK_PERIOD_DASH);
-	gpio_pin_set_dt(&status_led, 0);
-	k_msleep(LED_BLINK_PERIOD_PAUSE);
-}
-
-static void led_dot(void)
-{
-	gpio_pin_set_dt(&status_led, 1);
-	k_msleep(LED_BLINK_PERIOD_DOT);
-	gpio_pin_set_dt(&status_led, 0);
-	k_msleep(LED_BLINK_PERIOD_PAUSE);
-}
-
-static void led_blink_thread(void *p1, void *p2, void *p3)
-{
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
-
-	if (!gpio_is_ready_dt(&status_led)) {
-		return;
-	}
-
-	// Flash OK in morse code: - - -   - . -
-	while (1) {
-		// O
-		led_dash();
-		led_dash();
-		led_dash();
-
-		k_msleep(LED_BLINK_PERIOD_LETTER);
-
-		// K
-		led_dash();
-		led_dot();
-		led_dash();
-
-		// Pause
-		k_msleep(LED_BLINK_PERIOD_WORD);
-	}
-}
-
-int status_led_init(void)
-{
-	int ret;
-
-	/* Initialize status LED */
-	if (gpio_is_ready_dt(&status_led)) {
-		ret = gpio_pin_configure_dt(&status_led, GPIO_OUTPUT_INACTIVE);
-		if (ret < 0) {
-			LOG_INF("Could not configure LED1 GPIO\n");
-			return -1;
-		}
-	} else {
-		LOG_INF("LED1 GPIO not ready\n");
-		return -1;
-	}
-
-	k_thread_create(&led_blink_thread_data, led_blink_stack,
-			K_THREAD_STACK_SIZEOF(led_blink_stack),
-			led_blink_thread,
-			NULL, NULL, NULL,
-			LED_BLINK_PRIORITY, 0, K_NO_WAIT);
-	k_thread_name_set(&led_blink_thread_data, "led_blink");
-
-	return 0;
-}
-#else /* DT_NODE_HAS_STATUS_OKAY(STATUS_LED) */
-int status_led_init(void)
-{
-	return 0;
-}
-#endif /* DT_NODE_HAS_STATUS_OKAY(STATUS_LED) */
