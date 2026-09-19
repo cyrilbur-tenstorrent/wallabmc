@@ -9,7 +9,7 @@ int power_init(void);
 int reset_init(void);
 int power_auto_poweron(void);
 
-void power_set_state(bool on);
+int power_set_state(bool on);
 bool power_get_state(void);
 int power_cycle(void);
 int power_reset(void);
