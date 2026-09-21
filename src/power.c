@@ -210,22 +210,39 @@ int power_reset(void)
 {
 	int ret;
 
-	if (!DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)) {
-		LOG_ERR("No reset GPIO");
-		return -1;
-	}
-	ret = gpio_pin_set_dt(&gpio_reset, 1);
-	if (ret < 0) {
-		LOG_INF("Could not toggle RESET GPIO\n");
+	if (!system_power_state) {
+		LOG_ERR("Host reset requested with power off\n");
 		return -1;
 	}
 
-	k_msleep(1000);
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_RESET) &&
+	    gpio_is_ready_dt(&gpio_reset)) {
+		ret = gpio_pin_set_dt(&gpio_reset, 1);
+		if (ret < 0) {
+			LOG_INF("Could not assert RESET GPIO\n");
+			return -1;
+		}
+	}
 
-	ret = gpio_pin_set_dt(&gpio_reset, 0);
-	if (ret < 0) {
-		LOG_INF("Could not toggle RESET GPIO\n");
-		return -1;
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		for (int i = 0; i < 10; i++) {
+			gpio_pin_set_dt(&power_led_gpio, 0);
+			k_msleep(50);
+			gpio_pin_set_dt(&power_led_gpio, 1);
+			k_msleep(50);
+		}
+	} else {
+		k_msleep(1000);
+	}
+
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_RESET) &&
+	    gpio_is_ready_dt(&gpio_reset)) {
+		ret = gpio_pin_set_dt(&gpio_reset, 0);
+		if (ret < 0) {
+			LOG_INF("Could not deassert RESET GPIO\n");
+			return -1;
+		}
 	}
 
 	return 0;
