@@ -145,6 +145,8 @@ run_redfishtool_tests() {
 		for cmd in \
 			"Systems reset On" \
 			"Systems reset ForceOff" \
+			"Systems reset On" \
+			"Systems reset ForceRestart" \
 			"Systems reset PowerCycle"; do
 			echo "--- redfishtool $cmd"
 			"${rt[@]}" $cmd || fail "redfishtool $cmd (exit $?)"
