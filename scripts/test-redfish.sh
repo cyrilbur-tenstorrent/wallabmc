@@ -7,10 +7,10 @@
 # the tests still runs when some tools are not installed.
 #
 # By default only read-only tests run. Tests that change the board state
-# (power on/off/cycle) are skipped unless --all is given.
+# (power on/off/reset/cycle) are skipped unless --all is given.
 #
 # Usage: test-redfish.sh [--all] [IP]
-#   --all  Also run tests that change board state (power on/off/cycle)
+#   --all  Also run tests that change board state (power on/off/reset/cycle)
 #   IP     Target device address (default: 192.168.1.110)
 
 set -u
@@ -21,7 +21,7 @@ PASS=admin
 usage() {
 	cat <<'EOF'
 Usage: test-redfish.sh [--all] [IP]
-  --all  Also run tests that change board state (power on/off/cycle)
+  --all  Also run tests that change board state (power on/off/reset/cycle)
   IP     Target device address (default: 192.168.1.110)
 EOF
 }
@@ -142,12 +142,23 @@ run_redfishtool_tests() {
 
 	# These change the host power state, so only run them on request.
 	if [ "$run_all" -eq 1 ]; then
-		for cmd in \
-			"Systems reset On" \
-			"Systems reset ForceOff" \
-			"Systems reset On" \
-			"Systems reset ForceRestart" \
-			"Systems reset PowerCycle"; do
+		local system
+		local cmds=(
+			"Systems reset On"
+			"Systems reset ForceOff"
+			"Systems reset On"
+		)
+		# ForceRestart is only advertised on boards that can reset the
+		# host, and redfishtool refuses client-side to send a ResetType
+		# that is not in ResetType@Redfish.AllowableValues.
+		system="$("${rt[@]}" Systems -I system)" || fail "redfishtool Systems -I system (exit $?)"
+		if printf '%s' "$system" | grep -q '"ForceRestart"'; then
+			cmds+=("Systems reset ForceRestart")
+		else
+			echo ">>> ForceRestart not supported by this board, skipping"
+		fi
+		cmds+=("Systems reset PowerCycle")
+		for cmd in "${cmds[@]}"; do
 			echo "--- redfishtool $cmd"
 			"${rt[@]}" $cmd || fail "redfishtool $cmd (exit $?)"
 		done

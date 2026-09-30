@@ -1544,13 +1544,14 @@ static int system_get_handler(struct http_resource_user_data *user_data)
 		.actions = {
 			.reset_action = {
 				.target = "/redfish/v1/Systems/system/Actions/ComputerSystem.Reset",
+				/* ForceRestart is last so it can be left off the list */
 				.reset_type_values = {
 					"On",
 					"ForceOff",
 					"PowerCycle",
 					"ForceRestart"
 				},
-				.reset_type_values_len = 4
+				.reset_type_values_len = power_reset_supported() ? 4 : 3
 			}
 		}
 	};
@@ -1601,6 +1602,10 @@ static int system_reset_post_handler(struct http_resource_user_data *user_data)
 	} else if (strcmp(payload.reset_type, "PowerCycle") == 0) {
 		ret = power_cycle();
 	} else if (strcmp(payload.reset_type, "ForceRestart") == 0) {
+		if (!power_reset_supported()) {
+			LOG_ERR("ComputerSystem.Reset: ForceRestart not supported");
+			return HTTP_400_BAD_REQUEST;
+		}
 		ret = power_reset();
 	} else {
 		LOG_ERR("ComputerSystem.Reset: Bad reset type");

@@ -12,6 +12,7 @@ int power_auto_poweron(void);
 int power_set_state(bool on);
 bool power_get_state(void);
 int power_cycle(void);
+bool power_reset_supported(void);
 int power_reset(void);
 
 #endif

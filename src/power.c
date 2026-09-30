@@ -221,9 +221,25 @@ int reset_init(void)
 	return 0;
 }
 
+/*
+ * A host reset needs a reset GPIO to drive. A board with no host power
+ * GPIOs has no host to control at all, so power on/off/reset are
+ * simulated there (power state and power LED only).
+ */
+bool power_reset_supported(void)
+{
+	return DT_NODE_HAS_STATUS_OKAY(GPIO_RESET) ||
+	       ARRAY_SIZE(power_gpios) == 0;
+}
+
 int power_reset(void)
 {
 	int ret;
+
+	if (!power_reset_supported()) {
+		LOG_ERR("No reset GPIO");
+		return -1;
+	}
 
 	if (!system_power_state) {
 		LOG_ERR("Host reset requested with power off\n");
