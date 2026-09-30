@@ -1602,6 +1602,15 @@ static int system_reset_post_handler(struct http_resource_user_data *user_data)
 		ret = power_cycle();
 	} else if (strcmp(payload.reset_type, "ForceRestart") == 0) {
 		ret = power_reset();
+		if (ret == -ENOTSUP) {
+			/*
+			 * ForceRestart can be implemented as PowerCycle. Redfish
+			 * does not specify exactly how all reset types are
+			 * implemented.
+			 */
+			LOG_INF("ForceRestart: no reset support, falling back to PowerCycle");
+			ret = power_cycle();
+		}
 	} else {
 		LOG_ERR("ComputerSystem.Reset: Bad reset type");
 		return HTTP_400_BAD_REQUEST;

@@ -221,9 +221,25 @@ int reset_init(void)
 	return 0;
 }
 
+/*
+ * If there is no reset GPIO, return -ENOTSUP so the caller can fall back
+ * to power_cycle() to implement roughly equivalent behaviour.
+ */
 int power_reset(void)
 {
 	int ret;
+
+	if (!DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)) {
+		/*
+		 * Special case if there are also no power GPIOs.
+		 * We are faking power and reset control with the
+		 * power LED, so continue and blink the LED for reset.
+		 */
+		if (ARRAY_SIZE(power_gpios) > 0) {
+			LOG_INF("No reset GPIO");
+			return -ENOTSUP;
+		}
+	}
 
 	if (!system_power_state) {
 		LOG_ERR("Host reset requested with power off\n");
