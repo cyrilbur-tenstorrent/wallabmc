@@ -107,6 +107,7 @@ Before submitting a pull request:
 
 Supported test platforms:
 
+- Tenstorrent Atlantis SLT MCU
 - SiFive HiFive Premier P550 MCU
 - Nucleo F767ZI board
 - qemu ( see [run_qemu_ci.py](scripts/run_qemu_ci.py) )

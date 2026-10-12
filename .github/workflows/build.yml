@@ -30,7 +30,7 @@ jobs:
 
     strategy:
       matrix:
-        board: [nucleo_f767zi, hifive_premier_p550_mcu, qemu_cortex_m3]
+        board: [nucleo_f767zi, hifive_premier_p550_mcu, atlantis_slt_mcu, qemu_cortex_m3]
 
     env:
       CMAKE_PREFIX_PATH: /opt/toolchains

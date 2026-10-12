@@ -1,0 +1,15 @@
+# atlantis_slt_mcu board configuration
+
+# SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_ATLANTIS_SLT_MCU
+
+if NETWORKING
+
+config NET_L2_ETHERNET
+	default y
+
+endif # NETWORKING
+
+endif # BOARD_ATLANTIS_SLT_MCU
