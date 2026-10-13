@@ -6,12 +6,12 @@ Atlantis SLT BMC Hardware Reference
 ***********************************
 
 This document maps the STM32F746ZGT6 pins to board signals on the
-Tenstorrent Atlantis SLT board, based on the schematic Rev 0.996 (sheet 32
+Tenstorrent Atlantis SLT board, based on the schematic Rev 0.997 (sheet 32
 "STM32" and the sheets it references), and records what WallaBMC does with
 them. Schematic signal names are used throughout; sheet numbers refer to
-Rev 0.996.
+Rev 0.997.
 
-**Schematic**: Atlantis SLT Rev 0.996 (CoreLab, 2026-09-30). The Tenstorrent
+**Schematic**: Atlantis SLT Rev 0.997 (CoreLab, 2026-10-08). The Tenstorrent
 board review (ticket IPS-1761) is the source for the power-good and OTP
 handshake requirements quoted below.
 
@@ -26,7 +26,8 @@ MCU overview
 - **Clocks**: 8 MHz crystal Y12 (HSE), 32.768 kHz crystal Y13 (LSE, not yet
   enabled: the RTC runs from LSI until the crystal is verified)
 - **RTC backup**: VBAT is the raw CR1220 coin cell in J62 (no diode-OR to
-  3.3 V). Without a cell the RTC loses time on every power cycle.
+  3.3 V), shared with the SoC-side S35390A RTC on sheet 35. Without a cell
+  the MCU RTC loses time on every power cycle.
 - **BOOT0**: header J69. Jumper 1-2 boots from flash, 2-3 selects the ST
   system bootloader, no jumper leaves BOOT0 floating.
 - **Reset**: button B3 on NRST
@@ -43,10 +44,11 @@ The FT4232H U42 on USB-C port J39 provides:
    * - Channel
      - Function
      - Notes
-   * - A (ADBUS0-2)
+   * - A (ADBUS0-2, ADBUS5)
      - MCU SWD
-     - ADBUS0 SWCLK, ADBUS1 to SWDIO direct, ADBUS2 to SWDIO via 470R.
-       See ``support/README.md``.
+     - ADBUS0 SWCLK, ADBUS1 (DO) to SWDIO via 470R, ADBUS2 (DI) to SWDIO.
+       ADBUS5 is wired to PC0 (``ft232_gpio``), purpose undefined. See
+       ``support/README.md``.
    * - B
      - unused
      -
@@ -124,7 +126,7 @@ Implemented in WallaBMC
    * - PF1 / PF0
      - I2C6_SCL / SDA
      - ``i2c2``
-     - TMP117 and M24M01 EEPROM, internal pull-ups
+     - TMP117 and M24M01 EEPROM, 4.7K pull-ups (R873/R874)
    * - PB8 / PB7
      - I2C2_SCL_3V3 / SDA_3V3
      - ``i2c1``
@@ -193,7 +195,8 @@ Defined in the DTS, not yet used
      - PG_PH1 / PG_PH2
      - ``pg_ph1`` / ``pg_ph2``
      - In
-     - VCORE phases in regulation (high, ~4.4 V level, 5 V tolerant pins)
+     - VCORE phases in regulation, high. PG_PH2 sits at the ~4.4 V LDO;
+       PG_PH1 is clamped by LED DS2 to about 2 V (see Known issues)
    * - PG7
      - PWR_GOOD_LPDDR5
      - ``pwr_good_lpddr5``
@@ -206,14 +209,16 @@ Defined in the DTS, not yet used
      - DDR_VDD2L good (high)
    * - PG1 / PG2
      - PWR1_GD_3V3 / PWR2_GD_3V3
-     - ``pwr1_gd`` / ``pwr2_gd``
+     - ``pwr1_gd`` / ``pwr2_gd`` + gpio-hogs
      - Out
-     - Power-good handshakes to the SoC (level shifted by U61)
+     - Power-good handshakes to the SoC through 15K/18K dividers
+       (push-pull only), held low
    * - PF2
      - OTP_PWRRDY_3V3
-     - ``otp_pwrrdy``
+     - ``otp_pwrrdy`` + gpio-hog
      - Out
-     - OTP power-ready handshake to the SoC (level shifted by U85)
+     - OTP power-ready handshake to the SoC through a 15K/18K divider,
+       held low
    * - PG0
      - TJ_MAX_3V3
      - ``tj_max``
@@ -273,13 +278,20 @@ Defined in the DTS, not yet used
    * - PF10
      - MPM54304_GPIO
      - ``mpm54304_gpio``
-     - 
-     - MPM54304 GPIO, function set by its MTP (PG, address, sync...)
+     - In
+     - MPM54304 power good (open drain with the -0001 MTP, no board
+       pull-up, internal pull-up enabled)
    * - PF3 / PF4
      - FT4232_GPIO2 / GPIO3
      - ``ft4232_gpio*``
-     - 
+     -
      - Spare lines from the SoC-side FT4232 U73 channel A
+   * - PC0
+     - FT232_GPIO
+     - ``ft232_gpio``
+     - In
+     - MCU-side FT4232 U42 ADBUS5 through R815, purpose undefined; never
+       drive it
    * - PD10 / PD11
      - STM32_ID0 / ID1
      - ``stm32_id*``
@@ -295,9 +307,9 @@ Not connected or spare
 ----------------------
 
 PA0, PB5, PB9, PB10, PB15, PD4, PD7, PF5 and PG14 only reach test points
-M24-M32 on sheet 53. PC0 (FT232_GPIO) and the eFuse enable from U42 are
-behind unpopulated 0R links R815/R814. PC13 is unconnected. PA15 and PB4
-have 4.7K pull-ups only.
+M24-M32 on sheet 53. The eFuse enable from U42 ADBUS4 is behind the
+unpopulated 0R link R814. PC13 is unconnected. PA15 and PB4 have 4.7K
+pull-ups only.
 
 Ethernet
 ========
@@ -364,6 +376,12 @@ the SoC at BMC start and ``reset`` pulses it for one second. SYS_RSTN also
 asserts PERST# on the three PCIe slots through D9-D11. RESETN has an
 internal pull-up in the SoC.
 
+U73 ADBUS4 has no series resistor or pull-down. It is DTR# in the
+FT4232H's default UART mode and sits high unless the host actively drives
+it low (a port open with DTR asserted, or an MPSSE layout with that bit
+low), so a USB-C cable on J71 to an idle host can hold the SoC in reset
+no matter what PG5 does. See Known issues.
+
 Power
 =====
 
@@ -371,14 +389,14 @@ What comes up by itself
 -----------------------
 
 ATX 12 V (J30) passes fuse F1 and the TPS259830 eFuse U54 (UVLO about
-10.3 V, ILIM 18 A) to P12V ("12V Ready" LED DS3), and U50 makes P3V3 for
+10.8 V, ILIM 18 A) to P12V ("12V Ready" LED DS3), and U50 makes P3V3 for
 the MCU, PHY and the QSPI flash. Both FT4232H bridges (U42 on J39, U73 on
 J71) run from their own USB VBUS, so they enumerate with or without 12 V.
-The eFuse enable is reachable
-only from push-button B1 and the SoC-side FT4232 U73 (BDBUS7, R816
-fitted); the MCU-side path R814 is not populated. ATX PS_ON is a jumper
-on J31. So the MCU cannot power-cycle the board or itself: "power off"
-means dropping the SoC rails.
+The eFuse enable is reachable only from push-button B1 and the SoC-side
+FT4232 U73 (BDBUS7, R816 fitted) through MOSFET Q12, so **BDBUS7 high
+disables the eFuse**; the MCU-side path R814 is not populated. ATX PS_ON
+is a jumper on J31. So the MCU cannot power-cycle the board or itself:
+"power off" means dropping the SoC rails.
 
 SoC rails controlled by the MCU
 -------------------------------
@@ -410,7 +428,7 @@ VDD1 > VDD2 > 0.9 V > VDDQ (sheet 44).
      - MPM54304_EN (PE12)
      - U53 MPM54304
      - DVDD_1V8, DVDD_3V3, AVDD_1V8, AVDD_0V8
-     - none wired (MPM54304_GPIO may be PG)
+     - MPM54304_GPIO (PF10)
    * - 4
      - DDR_VDD_EN (PE15)
      - U26 TPS51488
@@ -466,10 +484,13 @@ PMIC I2C
 --------
 
 The regulators share one I2C/PMBus bus (schematic I2C4): TPS546E25 at
-0x0D (PMBus), TPS628681 at 0x49, TPS628682 at 0x41, MPM54304 at 0x68, with
-pull-ups to the TPS546E25 4.4 V LDO. Headers J67 (SCL) and J68 (SDA) select
-the master: 1-2 puts the MCU's I2C5 (STM32 ``i2c4``, PD12/PD13) on the bus,
-2-3 the SoC's I2C4.
+0x0D (PMBus), TPS628681 at 0x49, TPS628682 at 0x41, MPM54304 at 0x68.
+Headers J67 (SCL) and J68 (SDA) select the master: 1-2 puts the MCU's I2C5
+(STM32 ``i2c4``, PD12/PD13) on the bus, 2-3 the SoC's I2C4. The pull-ups
+R179/R180 to the TPS546E25 4.4 V LDO are not fitted (the MPM54304 pins are
+rated to 4 V), so in the 1-2 position the only pull-ups are the MCU-side
+R204/R205 (4.7K to P3V3) and in the 2-3 position only the U67 shifter's
+internal ones while DVDD_1V8 is up.
 
 JTAG
 ====
@@ -539,9 +560,8 @@ I2C buses
      - I2C2 (``i2c2``)
      - PF1 SCL, PF0 SDA
      - TMP117 (0x49, alert PD3), M24M01 EEPROM (128 KiB at 0x56; the
-       driver uses 0x57 for the upper half; write control tied low). No
-       external pull-ups: only the MCU's ~40K internal ones, so standard
-       speed.
+       driver uses 0x57 for the upper half; write control tied low). 4.7K
+       pull-ups R873/R874, fast mode.
    * - I2C2
      - I2C1 (``i2c1``)
      - PB8 SCL, PB7 SDA
@@ -559,10 +579,17 @@ All TXS0108E/TXS0102 shifters between the SoC and the MCU have their OE
 pulled to DVDD_1V8. Until MPM54304 is enabled, TJ_MAX_3V3 and
 GPIO2/8/11/12_3V3 are undriven on the MCU side; firmware must ignore them
 until DVDD_1V8 is up, and must not add pull-downs (they would fight the
-shifters' internal pull-ups once enabled). Rev 0.996 adds unpopulated
-15K/18K dividers (R864-R867, R870/R871) that can replace the shifters on
-PWR1_GD, PWR2_GD and OTP_PWRRDY so that the SoC sees 0 while the MCU is
-unpowered.
+shifters' internal pull-ups once enabled).
+
+PWR1_GD, PWR2_GD and OTP_PWRRDY do not go through a shifter: 15K/18K
+dividers (R864-R867 on sheet 46, R870/R871 on sheet 47) replace the
+unfitted 0R links into U61/U85, so the SoC sees 1.8 V when the
+MCU drives 3.3 V and 0 V when the pin is low or floating (MCU unpowered or
+in reset). The pins must be push-pull: open drain would never reach a
+high. The shifters' B ports stay attached to the 3.3 V nets, so once
+DVDD_1V8 is up their internal pull-ups lift a floating pin to about 1.5 V
+at the SoC; the gpio-hogs keep the three pins driven low from boot and the
+sequencer must never leave them as inputs.
 
 Jumpers and switches
 ====================
@@ -603,7 +630,7 @@ Jumpers and switches
      - MCU user button / MCU reset
      -
    * - J62
-     - CR1220 for the MCU RTC
+     - CR1220 for the MCU and SoC RTCs
      -
 
 Flash layout
@@ -629,6 +656,31 @@ Flash layout
      - 896 KB
      - ``image-0``
 
+Known issues
+============
+
+None of these is fixed by firmware.
+
+- **PG_PH1 level** (sheet 41): the TPS546E25 PG output is pulled up by
+  R178 10K to the ~4.4 V LDO but also feeds LED DS2 through R185 1K, so
+  when PG releases the node sits at the LED forward voltage plus a little,
+  roughly 2 V (the LED part is not on the schematic). That is between the
+  STM32's design-guaranteed VIH of 1.8 V and its production-tested 2.3 V,
+  so PC7 may read low or be noisy while VCORE is fine.
+  PG_PH2 has no LED and is unaffected. Measure before relying on it; the
+  fix is to buffer the LED or remove DS2.
+- **SoC held in reset by the USB bridge** (sheets 8, 55): U73 ADBUS4 drives
+  the reset OR directly and is DTR#, high unless the host drives it low.
+  A J71 cable to a host that has not asserted DTR, or any port close,
+  asserts SoC reset. The fix is a pull-down and series resistor, an
+  inverted sense, or an EEPROM/host configuration that keeps ADBUS4 low.
+- **12 V eFuse and the USB bridge** (sheets 40, 55): with Q12 the eFuse is
+  disabled when BDBUS7 is high, and BDBUS7 is RI# with the FT4232H's
+  internal pull-up when nothing drives it. Its gate then sits around
+  1.9 V, above the BSS138 threshold, so 12 V may stay off or drop while
+  J71 is attached to an idle host. Measure P12V with J71 plugged in; a
+  smaller R877 or a Schmitt buffer fixes it.
+
 Bring-up checklist
 ==================
 
@@ -643,8 +695,8 @@ Bring-up checklist
    once it boots.
 #. Check the FT4232 channel A SWD path programs the MCU; J61 is the
    fallback.
-#. Confirm whether the rev 0.996 reserve dividers on PWR1_GD/PWR2_GD and
-   OTP_PWRRDY were fitted (IPS-1761).
+#. Measure PG_PH1 at PC7 with VCORE on, SYS_RSTN and P12V with a USB-C
+   cable on J71 to an idle host (Known issues).
 
 Feature work
 ============

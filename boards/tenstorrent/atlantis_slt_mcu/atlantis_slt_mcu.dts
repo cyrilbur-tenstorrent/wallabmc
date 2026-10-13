@@ -9,7 +9,7 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 /*
- * Pin names follow the Atlantis SLT schematic (Rev 0.996, sheet 32).
+ * Pin names follow the Atlantis SLT schematic (Rev 0.997, sheet 32).
  * Schematic I2C bus numbers are not STM32 peripheral numbers:
  * schematic I2C2 (to SoC) is STM32 I2C1, I2C5 (headers J67/J68) is
  * STM32 I2C4 and I2C6 (TMP117, EEPROM) is STM32 I2C2.
@@ -115,8 +115,9 @@
 		};
 
 		/*
-		 * Handshakes to the SoC (outputs, level shifted to 1.8V). Must be
-		 * low while VDD/VDDIO ramp and asserted only once they are good.
+		 * Handshakes to the SoC through 15K/18K dividers (push-pull only,
+		 * rev 0.997). Must be low while VDD/VDDIO ramp and asserted only
+		 * once they are good.
 		 */
 		pwr1_gd: pwr1_gd {
 			gpios = <&gpiog 1 GPIO_ACTIVE_HIGH>;
@@ -238,9 +239,9 @@
 			label = "STM32_ID1";
 		};
 
-		/* MPM54304 multi-function GPIO, mode set by the module MTP */
+		/* MPM54304 GPIO: open-drain power good with the -0001 MTP, no pull-up */
 		mpm54304_gpio: mpm54304_gpio {
-			gpios = <&gpiof 10 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpiof 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_UP)>;
 			label = "MPM54304_GPIO";
 		};
 
@@ -252,6 +253,16 @@
 		ft4232_gpio3: ft4232_gpio3 {
 			gpios = <&gpiof 4 GPIO_ACTIVE_HIGH>;
 			label = "FT4232_GPIO3";
+		};
+
+		/*
+		 * MCU-side FT4232 U42 ADBUS5, wired since rev 0.997 (R815).
+		 * Purpose undefined; keep it an input so it cannot fight the
+		 * bridge or back-feed it when J39 is unplugged.
+		 */
+		ft232_gpio: ft232_gpio {
+			gpios = <&gpioc 0 GPIO_ACTIVE_HIGH>;
+			label = "FT232_GPIO";
 		};
 	};
 
@@ -344,8 +355,8 @@
 };
 
 /*
- * Schematic I2C6. No external pull-ups: only the ~40K internal ones from
- * the pinctrl defaults, so keep it at standard speed.
+ * Schematic I2C6. Rev 0.997 adds 4.7K pull-ups (R873/R874); rev 0.996
+ * boards only have the ~40K internal ones, so stay at standard speed.
  */
 &i2c2 {
 	pinctrl-0 = <&i2c2_scl_pf1 &i2c2_sda_pf0>;
@@ -378,7 +389,10 @@
 	status = "okay";
 };
 
-/* Schematic I2C5: PMIC bus when J67/J68 are jumpered 1-2 */
+/*
+ * Schematic I2C5: PMIC bus when J67/J68 are jumpered 1-2. Only the MCU
+ * side has pull-ups (R204/R205) since rev 0.997 dropped R179/R180.
+ */
 &i2c4 {
 	pinctrl-0 = <&i2c4_scl_pd12 &i2c4_sda_pd13>;
 	pinctrl-names = "default";

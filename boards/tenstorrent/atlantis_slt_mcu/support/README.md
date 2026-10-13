@@ -29,12 +29,15 @@ openocd -f boards/tenstorrent/atlantis_slt_mcu/support/openocd.cfg \
 The `wallabmc-firmware-atlantis_slt_mcu` artifact of a GitHub Actions run
 holds the same images as `mcuboot.hex` and `wallabmc.signed.hex`.
 
-The board wires the FT4232H data output (ADBUS1) straight to SWDIO and the
-data input (ADBUS2) through 470R, the mirror of the usual OpenOCD
-"resistor hack". The dummy `SWDIO_OE` signal in `openocd.cfg` makes the
-ftdi driver switch ADBUS1 to an input while the target drives SWDIO; this
-path is untested on hardware. If the FT4232H EEPROM on the board programs
-a non-default USB ID, adjust `ftdi vid_pid` in `openocd.cfg`.
+The board wires the FT4232H data output (ADBUS1) to SWDIO through 470R and
+the data input (ADBUS2) straight to SWDIO, the usual OpenOCD "resistor
+hack". The dummy `SWDIO_OE` signal in `openocd.cfg` makes the ftdi driver
+switch ADBUS1 to an input while the target drives SWDIO; this path is
+untested on hardware. Both FT4232H bridges on the board (U42 on J39,
+U73 on J71) enumerate as 0403:6011 with no serial number unless their
+EEPROMs are programmed; with both on one host pick U42 with
+`adapter usb location` in `openocd.cfg`, or program serial numbers and
+use `adapter serial`.
 
 ## Via the SWD header
 
