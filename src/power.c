@@ -15,11 +15,12 @@
 LOG_MODULE_REGISTER(wallabmc_power);
 
 #include "config.h"
+#include "power.h"
 
 #define GPIO_POWER_1 DT_ALIAS(power_gpio_1)
 #define GPIO_POWER_2 DT_ALIAS(power_gpio_2)
 #define GPIO_RESET DT_ALIAS(reset_gpio_1)
-#define STATUS_LED DT_ALIAS(status_led)
+#define GPIO_POWER_LED  DT_ALIAS(power_led)
 
 static const struct gpio_dt_spec power_gpios[] = {
 #if DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_1)
@@ -29,6 +30,20 @@ static const struct gpio_dt_spec power_gpios[] = {
 	GPIO_DT_SPEC_GET(GPIO_POWER_2, gpios),
 #endif
 };
+
+static const struct gpio_dt_spec power_led_gpio =
+#if DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED)
+	GPIO_DT_SPEC_GET(GPIO_POWER_LED, gpios);
+#else
+	{ 0 };
+#endif
+
+static const struct gpio_dt_spec gpio_reset =
+#if DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)
+	GPIO_DT_SPEC_GET(GPIO_RESET, gpios);
+#else
+	{ 0 };
+#endif
 
 static bool system_power_state = false;
 
@@ -44,9 +59,16 @@ static int power_on(void)
 	for (i = 0; i < ARRAY_SIZE(power_gpios); i++) {
 		ret = gpio_pin_set_dt(&power_gpios[i], 1);
 		if (ret < 0) {
-			LOG_INF("Could not toggle power GPIO %d\n", i);
+			LOG_ERR("Could not assert power GPIO %d", i);
 			return -1;
 		}
+	}
+
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		/* Don't fail the operation on LED failure */
+		if (gpio_pin_set_dt(&power_led_gpio, 1) < 0)
+			LOG_ERR("Could not assert power LED");
 	}
 
 	system_power_state = true;
@@ -61,9 +83,16 @@ static int power_off(void)
 	for (i = 0; i < ARRAY_SIZE(power_gpios); i++) {
 		ret = gpio_pin_set_dt(&power_gpios[i], 0);
 		if (ret < 0) {
-			LOG_INF("Could not toggle power GPIO %d\n", i);
+			LOG_ERR("Could not deassert power GPIO %d", i);
 			return -1;
 		}
+	}
+
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		/* Don't fail the operation on LED failure */
+		if (gpio_pin_set_dt(&power_led_gpio, 0) < 0)
+			LOG_ERR("Could not deassert power LED");
 	}
 
 	system_power_state = false;
@@ -71,7 +100,22 @@ static int power_off(void)
 	return 0;
 }
 
-void power_set_state(bool on)
+int power_cycle(void)
+{
+	if (system_power_state) {
+		if (power_off() < 0)
+			return -1;
+	}
+
+	k_msleep(2000);
+
+	if (power_on() < 0)
+		return -1;
+
+	return 0;
+}
+
+int power_set_state(bool on)
 {
 	int ret;
 
@@ -82,16 +126,22 @@ void power_set_state(bool on)
 
 	if (ret < 0) {
 		LOG_ERR("Failed to set power state: %d", ret);
-		return;
+		return ret;
 	}
 
 	LOG_INF("System Power State changed to: %s", power_get_state() ? "ON" : "OFF");
+	return 0;
 }
 
 int power_init(void)
 {
 	int i;
 
+	/*
+	 * There is no support for host power state to persist over BMC
+	 * reboots yet. Power GPIOs are always initialised inactive and
+	 * system_power_state is false at boot.
+	 */
 	for (i = 0; i < ARRAY_SIZE(power_gpios); i++) {
 		if (!gpio_is_ready_dt(&power_gpios[i])) {
 			LOG_INF("Power GPIO %d not ready\n", i);
@@ -104,9 +154,23 @@ int power_init(void)
 		}
 	}
 
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		if (gpio_pin_configure_dt(&power_led_gpio, GPIO_OUTPUT_INACTIVE) < 0)
+			LOG_INF("Could not configure power LED\n");
+	}
+
+	return 0;
+}
+
+int power_auto_poweron(void)
+{
 	if (config_host_auto_poweron()) {
-		// Power on at BMC boot
-		return power_on();
+		int ret = power_on();
+		if (ret < 0) {
+			LOG_ERR("Auto power-on failed: %d", ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -134,13 +198,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_power_cmds,
 
 SHELL_CMD_REGISTER(power, &sub_power_cmds, "Power commands", NULL);
 
-static const struct gpio_dt_spec gpio_reset =
-#if DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)
-	GPIO_DT_SPEC_GET(GPIO_RESET, gpios);
-#else
-	{ 0 };
-#endif
-
 int reset_init(void)
 {
 	int ret;
@@ -155,41 +212,73 @@ int reset_init(void)
 		return -1;
 	}
 
-	ret = gpio_pin_configure_dt(&gpio_reset, GPIO_OUTPUT_ACTIVE);
+	/*
+	 * Start inactive so the pin is hi-Z (open-drain) / driven inactive
+	 * at boot. GPIO_OUTPUT_ACTIVE would briefly assert reset to the host
+	 * every time the BMC starts up.
+	 */
+	ret = gpio_pin_configure_dt(&gpio_reset, GPIO_OUTPUT_INACTIVE);
 	if (ret < 0) {
 		LOG_INF("Could not configure reset GPIO\n");
-		return -1;
-	}
-
-	ret = gpio_pin_set_dt(&gpio_reset, 0);
-	if (ret < 0) {
-		LOG_INF("Could not toggle reset GPIO\n");
 		return -1;
 	}
 
 	return 0;
 }
 
+/*
+ * If there is no reset GPIO, return -ENOTSUP so the caller can fall back
+ * to power_cycle() to implement roughly equivalent behaviour.
+ */
 int power_reset(void)
 {
 	int ret;
 
 	if (!DT_NODE_HAS_STATUS_OKAY(GPIO_RESET)) {
-		LOG_ERR("No reset GPIO");
-		return -1;
+		/*
+		 * Special case if there are also no power GPIOs.
+		 * We are faking power and reset control with the
+		 * power LED, so continue and blink the LED for reset.
+		 */
+		if (ARRAY_SIZE(power_gpios) > 0) {
+			LOG_INF("No reset GPIO");
+			return -ENOTSUP;
+		}
 	}
-	ret = gpio_pin_set_dt(&gpio_reset, 1);
-	if (ret < 0) {
-		LOG_INF("Could not toggle RESET GPIO\n");
+
+	if (!system_power_state) {
+		LOG_ERR("Host reset requested with power off\n");
 		return -1;
 	}
 
-	k_msleep(1000);
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_RESET) &&
+	    gpio_is_ready_dt(&gpio_reset)) {
+		ret = gpio_pin_set_dt(&gpio_reset, 1);
+		if (ret < 0) {
+			LOG_INF("Could not assert RESET GPIO\n");
+			return -1;
+		}
+	}
 
-	ret = gpio_pin_set_dt(&gpio_reset, 0);
-	if (ret < 0) {
-		LOG_INF("Could not toggle RESET GPIO\n");
-		return -1;
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
+	    gpio_is_ready_dt(&power_led_gpio)) {
+		for (int i = 0; i < 10; i++) {
+			gpio_pin_set_dt(&power_led_gpio, 0);
+			k_msleep(50);
+			gpio_pin_set_dt(&power_led_gpio, 1);
+			k_msleep(50);
+		}
+	} else {
+		k_msleep(1000);
+	}
+
+	if (DT_NODE_HAS_STATUS_OKAY(GPIO_RESET) &&
+	    gpio_is_ready_dt(&gpio_reset)) {
+		ret = gpio_pin_set_dt(&gpio_reset, 0);
+		if (ret < 0) {
+			LOG_INF("Could not deassert RESET GPIO\n");
+			return -1;
+		}
 	}
 
 	return 0;
@@ -203,95 +292,3 @@ static int cmd_reset(const struct shell *sh, size_t argc, char **argv)
 }
 
 SHELL_CMD_REGISTER(reset, NULL, "Reset.", cmd_reset);
-
-#if DT_NODE_HAS_STATUS_OKAY(STATUS_LED)
-static const struct gpio_dt_spec status_led = GPIO_DT_SPEC_GET(STATUS_LED, gpios);
-
-/* LED blinking thread */
-#define LED_BLINK_STACK_SIZE 256
-#define LED_BLINK_PRIORITY   (CONFIG_NUM_PREEMPT_PRIORITIES - 1)
-#define LED_BLINK_PERIOD_DOT    250
-#define LED_BLINK_PERIOD_DASH   (3 * LED_BLINK_PERIOD_DOT)
-#define LED_BLINK_PERIOD_PAUSE  (LED_BLINK_PERIOD_DOT)
-#define LED_BLINK_PERIOD_LETTER (3 * LED_BLINK_PERIOD_DOT)
-#define LED_BLINK_PERIOD_WORD   (7 * LED_BLINK_PERIOD_DOT)
-
-static K_KERNEL_STACK_DEFINE(led_blink_stack, LED_BLINK_STACK_SIZE);
-static struct k_thread led_blink_thread_data;
-
-static void led_dash(void)
-{
-	gpio_pin_set_dt(&status_led, 1);
-	k_msleep(LED_BLINK_PERIOD_DASH);
-	gpio_pin_set_dt(&status_led, 0);
-	k_msleep(LED_BLINK_PERIOD_PAUSE);
-}
-
-static void led_dot(void)
-{
-	gpio_pin_set_dt(&status_led, 1);
-	k_msleep(LED_BLINK_PERIOD_DOT);
-	gpio_pin_set_dt(&status_led, 0);
-	k_msleep(LED_BLINK_PERIOD_PAUSE);
-}
-
-static void led_blink_thread(void *p1, void *p2, void *p3)
-{
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
-
-	if (!gpio_is_ready_dt(&status_led)) {
-		return;
-	}
-
-	// Flash OK in morse code: - - -   - . -
-	while (1) {
-		// O
-		led_dash();
-		led_dash();
-		led_dash();
-
-		k_msleep(LED_BLINK_PERIOD_LETTER);
-
-		// K
-		led_dash();
-		led_dot();
-		led_dash();
-
-		// Pause
-		k_msleep(LED_BLINK_PERIOD_WORD);
-	}
-}
-
-int status_led_init(void)
-{
-	int ret;
-
-	/* Initialize status LED */
-	if (gpio_is_ready_dt(&status_led)) {
-		ret = gpio_pin_configure_dt(&status_led, GPIO_OUTPUT_INACTIVE);
-		if (ret < 0) {
-			LOG_INF("Could not configure LED1 GPIO\n");
-			return -1;
-		}
-	} else {
-		LOG_INF("LED1 GPIO not ready\n");
-		return -1;
-	}
-
-	k_thread_create(&led_blink_thread_data, led_blink_stack,
-			K_THREAD_STACK_SIZEOF(led_blink_stack),
-			led_blink_thread,
-			NULL, NULL, NULL,
-			LED_BLINK_PRIORITY, 0, K_NO_WAIT);
-	k_thread_name_set(&led_blink_thread_data, "led_blink");
-
-	return 0;
-}
-#else /* DT_NODE_HAS_STATUS_OKAY(STATUS_LED) */
-int status_led_init(void)
-{
-	return 0;
-}
-#endif /* DT_NODE_HAS_STATUS_OKAY(STATUS_LED) */

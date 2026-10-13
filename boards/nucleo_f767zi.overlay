@@ -42,8 +42,7 @@
         jtagtdi = &jtagtdi;
         jtagtdo = &jtagtdo;
 
-        power-gpio-1 = &green_led;
-        reset-gpio-1 = &red_led;
+        power-led = &green_led;
         status-led = &blue_led;
 
         reset-button = &user_button;
