@@ -247,7 +247,7 @@
 		};
 
 		/*
-		 * MCU-side FT4232 U42 ADBUS5 (SLT rev 0.997 R815, EVB R849).
+		 * MCU-side FT4232 U42 ADBUS5 (SLT R815, EVB R849).
 		 * Purpose undefined; keep it an input so it cannot fight the
 		 * bridge or back-feed it when J39 is unplugged.
 		 */
@@ -345,15 +345,11 @@
 	status = "okay";
 };
 
-/*
- * SLT I2C6 / EVB MCU_M. 4.7K pull-ups on SLT rev 0.997 and the EVB; rev
- * 0.996 SLT boards only have the ~40K internal ones, so stay at standard
- * speed.
- */
+/* SLT I2C6 / EVB MCU_M, 4.7K pull-ups */
 &i2c2 {
 	pinctrl-0 = <&i2c2_scl_pf1 &i2c2_sda_pf0>;
 	pinctrl-names = "default";
-	clock-frequency = <I2C_BITRATE_STANDARD>;
+	clock-frequency = <I2C_BITRATE_FAST>;
 	status = "okay";
 
 	tmp117: tmp117@49 {
