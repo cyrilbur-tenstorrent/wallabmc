@@ -26,6 +26,7 @@ WallaBMC currently supports the following hardware platforms:
 | Hardware | Zephyr board name | Description |
 | --- | --- | --- |
 | **Tenstorrent Atlantis SLT MCU** | atlantis_slt_mcu | STM32F746 BMC on the Atlantis SLT board |
+| **Tenstorrent Atlantis EVB MCU** | atlantis_evb_mcu | STM32F746 BMC on the Atlantis EVB board |
 | **SiFive HiFive Premier P550 MCU** | hifive_premier_p550_mcu | RISC-V based platform |
 | **STM32 Nucleo F767ZI** | nucleo_f767zi | ARM Cortex-M7 development board (standalone, no host CPU) |
 | **qemu** | qemu_cortex_m3 | see [run_qemu_ci.py](scripts/run_qemu_ci.py) |
@@ -113,8 +114,9 @@ Alternatively, use the `build/wallabmc/zephyr/zephyr.signed.hex` and
 flash write_image erase build/mcuboot/zephyr/zephyr.hex
 flash write_image erase build/wallabmc/zephyr/zephyr.signed.hex
 ```
-Also see instructions on [flashing the p550](boards/sifive/hifive_premier_p550_mcu/support/README.md)
-and [the Atlantis SLT](boards/tenstorrent/atlantis_slt_mcu/support/README.md).
+Also see instructions on [flashing the p550](boards/sifive/hifive_premier_p550_mcu/support/README.md),
+the [Atlantis SLT](boards/tenstorrent/atlantis_slt_mcu/support/README.md)
+and the [Atlantis EVB](boards/tenstorrent/atlantis_evb_mcu/support/README.md).
 
 ### Running
 
