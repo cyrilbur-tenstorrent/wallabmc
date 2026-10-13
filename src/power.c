@@ -137,6 +137,11 @@ int power_init(void)
 {
 	int i;
 
+	/*
+	 * There is no support for host power state to persist over BMC
+	 * reboots yet. Power GPIOs are always initialised inactive and
+	 * system_power_state is false at boot.
+	 */
 	for (i = 0; i < ARRAY_SIZE(power_gpios); i++) {
 		if (!gpio_is_ready_dt(&power_gpios[i])) {
 			LOG_INF("Power GPIO %d not ready\n", i);
