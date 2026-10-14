@@ -49,28 +49,7 @@ Required tools:
 * A toolchain for your target platform (ARM or RISC-V)
 * OpenOCD or appropriate flashing tool for your hardware
 
-
-### Quick instructions (existing zephyr build env)
-
-Clone the repo into your home dir
-
-```
-cd $HOME
-git clone https://github.com/tenstorrent/wallabmc.git
-```
-
-Go to your zephyr build dir:
-
-```
-west build --sysbuild -b nucleo_f767zi ~/wallabmc
-```
-Where `nucleo_f767zi` can be replaced with the boards in [Hardware Support](#hardware-support).
-
-See [flashing](#flashing) on how to install
-
 ### Installation
-
-For those without a pre-existing zephyr build env
 
 #### Initialize Workspace
 
@@ -84,23 +63,41 @@ cd workspace
 west update
 ```
 
-#### Building
+### Configuring
 
-To build the application, run the following command:
+WallaBMC and Zephyr have some configuration options. Defaults generally should be used,
+though there are some particular options for interest.
 
+`CONFIG_DEFAULT_ADMIN_PASSWORD` - By default a random default admin password is generated
+by the build. This can be overidden.
+
+### Building
+
+To build the application, run the following commands.
+
+Append config options to the end of the build string
+as such:
+
+    `-- -DCONFIG_DEFAULT_ADMIN_PASSWORD='"admin"'`
+
+Or run west `build -b <board> -t menuconfig` to change
+these options.
+
+#### Nucleo F767ZI
 ```
 cd zephyr
-west build --sysbuild -b nucleo_f767zi ../wallabmc
+west build -p --sysbuild -b nucleo_f767zi ../wallabmc
 ```
 
-Where `nucleo_f767zi` can be replaced with the boards in [Hardware Support](#Hardware-Support)
-
-### Supported boards:
-
-See the [Hardware Support](#Hardware-Support) section.
+#### P550 MCU
+```
+cd zephyr
+west build -p --sysbuild -b hifive_premier_p550_mcu ../wallabmc
+```
 
 ### Flashing
 
+#### Nucleo F767ZI and P550 MUC:
 ```
 west flash --runner openocd
 ```
