@@ -10,6 +10,16 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 
+/*
+ * TODO:
+ * Host power operations are not serialized at all, and
+ * can be initiated via Zephyr console and redfish, which
+ * could race with one another.
+ *
+ * Should have mutex to serialize all host power control
+ * operations.
+ */
+
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(wallabmc_power);
