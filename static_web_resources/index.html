@@ -1247,7 +1247,11 @@
 
 				refreshTimer = setTimeout(refreshSystemData, 3000);
 			} catch (err) {
-				alert(`Failed: ${err.message}`);
+				if (err.message.endsWith('503'))
+					alert("Another host power operation is in progress; try again in a few seconds.");
+				else
+					alert(`Failed: ${err.message}`);
+				refreshTimer = setTimeout(refreshSystemData, 3000);
 			}
 		}
 
