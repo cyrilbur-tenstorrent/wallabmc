@@ -49,11 +49,11 @@ Currently implemented in WallaBMC
      - Description
    * - PD4
      - DCDC POWER ON (DC_EN)
-     - ``dcen`` / ``power-gpio-1``
+     - ``dcen``, rail ``dcdc``
      - DC-DC converter enable (main power rails). Active HIGH.
    * - PE3
      - ATX POWER ON REQUEST
-     - ``atxpson`` / ``power-gpio-2``
+     - ``atxpson``, rail ``atx``
      - ATX PSU power-on signal. Active HIGH.
    * - PE13
      - LED_PWM3 (Blue)
@@ -674,14 +674,18 @@ Power architecture and sequencing
 The MCU controls the board's power-on sequence:
 
 #. MCU is always powered from ATX 5V standby (VDD_5VSB -> VDD18_MCU via SY8113B buck)
-#. On ``power on``:
+#. ``power on`` walks ``power-on-sequence`` of the ``power_sequencer`` node
+   in ``boards/hifive_premier_p550_mcu.overlay``:
 
-   - Assert **DC_EN** (PD4 HIGH) -> enables main DC-DC converters
-     (SQ20056RAC for 5V/3.3V carrier, SY81012VDC for 5V SOM/SYS)
-   - Assert **ATX_PS_ON** (PE3 HIGH) -> tells ATX PSU to turn on main 12V
+   - Rail ``dcdc``: assert **DC_EN** (PD4 HIGH) -> enables main DC-DC
+     converters (SQ20056RAC for 5V/3.3V carrier, SY81012VDC for 5V SOM/SYS)
+   - Rail ``atx``: assert **ATX_PS_ON** (PE3 HIGH) -> tells ATX PSU to turn
+     on main 12V
 
-#. Monitor **DCDC_PWR_OK** (PE5) -> goes HIGH when power rails are stable
-#. On ``power off``: deassert both DC_EN and ATX_PS_ON
+#. **DCDC_PWR_OK** (PE5) goes HIGH when power rails are stable; not read
+   yet (see gaps below)
+#. ``power off`` walks ``power-off-sequence``: deassert ATX_PS_ON, then
+   DC_EN
 #. **Auto power-on jumper** J61 (2-pin) can force power-on at ATX standby
 
 **Original firmware power-on sequence** (from ``hf_power_task`` reverse engineering):
@@ -711,8 +715,9 @@ The MCU controls the board's power-on sequence:
 
 **Current WallaBMC implementation gaps**:
 
-- Does not monitor DCDC_PWR_OK (PE5) to confirm power-on success
-- Does not sequence ATX_PS_ON before DC_EN (both asserted simultaneously)
+- Does not monitor DCDC_PWR_OK (PE5) to confirm power-on success: needs a
+  GPIO node for PE5 listed as ``power-good`` of the ``dcdc`` rail
+- Asserts DC_EN before ATX_PS_ON; the original firmware does the reverse
 - Does not hold SOM in reset during power-on, nor release it after DC good
 - Does not drive front panel LEDs (PD10/PD11) to reflect power state
 - Does not detect power button presses (PA12)
@@ -751,7 +756,8 @@ Recommended order based on impact and complexity:
 
 #. **Fix reset-button alias** - one-line DTS fix, enables config-clear button
 #. **SOM reset** (PD5) - add DTS node + alias, existing ``power_reset()`` handles it
-#. **Power-good monitoring** (PE5) - add GPIO input, confirm power state
+#. **Power-good monitoring** (PE5) - add a GPIO node, list it as
+   ``power-good`` of the ``dcdc`` rail
 #. **Front panel LEDs** (PD10/PD11) - simple GPIO output, track power state
 #. **Power button** (PA12) - GPIO interrupt, triggers power on/off
 #. **I2C3 + INA226** - 12V rail power monitoring, Redfish Power resource

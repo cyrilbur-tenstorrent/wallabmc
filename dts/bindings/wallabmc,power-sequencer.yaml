@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Host power sequencer.
+
+  power-on-sequence lists wallabmc,power-rail nodes in the order they are
+  brought up: each rail waits for its power-good inputs to read inactive,
+  drives its enable active, waits for them to read active and then waits
+  its settle-ms. power-off-sequence lists them in the order they are taken
+  down, usually the reverse; a rail with off-delay-ms is taken down that
+  long after the rail before it. A failed power on takes down the rails
+  that came up, in power-off-sequence order. The host reset GPIO (alias
+  reset-gpio-1), if there is one, is asserted before the first rail comes
+  up and released after the last.
+
+  Example:
+
+    power_sequencer: power-sequencer {
+        compatible = "wallabmc,power-sequencer";
+        power-on-sequence = <&p5v &vcore>;
+        power-off-sequence = <&vcore &p5v>;
+    };
+
+compatible: "wallabmc,power-sequencer"
+
+include: base.yaml
+
+properties:
+  power-on-sequence:
+    type: phandles
+    required: true
+    description: The wallabmc,power-rail nodes in power-on order.
+
+  power-off-sequence:
+    type: phandles
+    required: true
+    description: |
+      The same rails in power-off order. Every rail in power-on-sequence
+      must appear here.
