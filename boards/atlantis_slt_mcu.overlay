@@ -2,12 +2,86 @@
 
 #include "atlantis_common.dtsi"
 
+/*
+ * Host power rails (doc/hardware.rst, "SoC rails controlled by the
+ * MCU"). The schematic does not order the groups after VCORE and gives
+ * no inter-rail timings; the settle times cover the regulators' own
+ * soft-start and are placeholders until the SoC power sequencing
+ * specification gives real numbers.
+ */
 / {
-	aliases {
+	power_rails: power-rails {
+		/* P5V feeds the LPDDR5 PMIC, which needs it while shutting down */
+		p5v: p5v {
+			compatible = "wallabmc,power-rail";
+			enable = <&power_5v_en>;
+			power-good = <&pwr_good_5v>;
+			off-delay-ms = <100>;
+		};
 		/*
-		 * Only the first rail until power.c can sequence all eight
-		 * enables with power-good checks (see doc/hardware.rst).
+		 * PG_PH1 is clamped to about 2 V by LED DS2; if PC7 reads low
+		 * with VCORE up, move it to power-good-optional (see Known
+		 * issues). The TPS546E25 secondary's PG_PH2 is undocumented in
+		 * a stack, so it only warns until measured.
 		 */
-		power-gpio-1 = &power_5v_en;
+		vcore_0v8: vcore_0v8 {
+			compatible = "wallabmc,power-rail";
+			enable = <&vcore_0v8_en>;
+			power-good = <&pg_ph1>;
+			power-good-optional = <&pg_ph2>;
+		};
+		mpm54304: mpm54304 {
+			compatible = "wallabmc,power-rail";
+			enable = <&mpm54304_en>;
+			power-good = <&mpm54304_gpio>;
+		};
+		ddr_vdd: ddr_vdd {
+			compatible = "wallabmc,power-rail";
+			enable = <&ddr_vdd_en>;
+			power-good = <&pwr_good_lpddr5>;
+		};
+		ddr_vdd2l: ddr_vdd2l {
+			compatible = "wallabmc,power-rail";
+			enable = <&ddr_vdd2l_en>;
+			power-good = <&pwr_good_0v9>;
+		};
+		ddr_vddq: ddr_vddq {
+			compatible = "wallabmc,power-rail";
+			enable = <&ddr_vddq_en>;
+			settle-ms = <1>;
+		};
+		pcie_vp: pcie_vp {
+			compatible = "wallabmc,power-rail";
+			enable = <&pcie_vp_en>;
+			settle-ms = <5>;
+		};
+		pcie_vph: pcie_vph {
+			compatible = "wallabmc,power-rail";
+			enable = <&pcie_vph_en>;
+			settle-ms = <5>;
+		};
+		/* Handshakes to the SoC, driven once every rail is up */
+		pwr1_gd: pwr1_gd {
+			compatible = "wallabmc,power-rail";
+			enable = <&pwr1_gd_out>;
+		};
+		pwr2_gd: pwr2_gd {
+			compatible = "wallabmc,power-rail";
+			enable = <&pwr2_gd_out>;
+		};
+		otp_pwrrdy: otp_pwrrdy {
+			compatible = "wallabmc,power-rail";
+			enable = <&otp_pwrrdy_out>;
+		};
+	};
+
+	power_sequencer: power-sequencer {
+		compatible = "wallabmc,power-sequencer";
+		power-on-sequence = <&p5v &vcore_0v8 &mpm54304 &ddr_vdd &ddr_vdd2l
+				     &ddr_vddq &pcie_vp &pcie_vph
+				     &pwr1_gd &pwr2_gd &otp_pwrrdy>;
+		power-off-sequence = <&otp_pwrrdy &pwr2_gd &pwr1_gd
+				      &pcie_vph &pcie_vp &ddr_vddq
+				      &ddr_vdd2l &ddr_vdd &mpm54304 &vcore_0v8 &p5v>;
 	};
 };

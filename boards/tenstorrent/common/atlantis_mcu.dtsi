@@ -109,15 +109,15 @@
 		 * only). Must be low while VDD/VDDIO ramp and asserted only once
 		 * they are good.
 		 */
-		pwr1_gd: pwr1_gd {
+		pwr1_gd_out: pwr1_gd {
 			gpios = <&gpiog 1 GPIO_ACTIVE_HIGH>;
 			label = "PWR1_GD_3V3";
 		};
-		pwr2_gd: pwr2_gd {
+		pwr2_gd_out: pwr2_gd {
 			gpios = <&gpiog 2 GPIO_ACTIVE_HIGH>;
 			label = "PWR2_GD_3V3";
 		};
-		otp_pwrrdy: otp_pwrrdy {
+		otp_pwrrdy_out: otp_pwrrdy {
 			gpios = <&gpiof 2 GPIO_ACTIVE_HIGH>;
 			label = "OTP_PWRRDY_3V3";
 		};
