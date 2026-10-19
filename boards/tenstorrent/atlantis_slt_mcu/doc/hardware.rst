@@ -109,8 +109,71 @@ Implemented in WallaBMC
      - SoC reset request, active high (see SoC reset)
    * - PE9
      - POWER_5V_EN
-     - ``power_5v_en`` / ``power-gpio-1``
+     - ``power_5v_en``, rail ``p5v`` (step 1)
      - P5V enable (see Power)
+   * - PE13
+     - VCORE_0V8_EN
+     - ``vcore_0v8_en``, rail ``vcore_0v8`` (step 2)
+     - TPS546E25 x2 CNTL via J17 (0.8 V, 80 A)
+   * - PE12
+     - MPM54304_EN
+     - ``mpm54304_en``, rail ``mpm54304`` (step 3)
+     - DVDD_3V3, DVDD_1V8, AVDD_1V8, AVDD_0V8
+   * - PE15
+     - DDR_VDD_EN
+     - ``ddr_vdd_en``, rail ``ddr_vdd`` (step 4)
+     - TPS51488 VDD1 1.8 V and VDD2 1.05 V
+   * - PB14
+     - DDR_VDD2L_EN
+     - ``ddr_vdd2l_en``, rail ``ddr_vdd2l`` (step 5)
+     - TPS746 0.9 V (from VDD1)
+   * - PE14
+     - DDR_VDDQ_EN
+     - ``ddr_vddq_en``, rail ``ddr_vddq`` (step 6)
+     - TPS51488 VDDQ 0.5 V
+   * - PE10
+     - PCIE_VP_EN
+     - ``pcie_vp_en``, rail ``pcie_vp`` (step 7)
+     - TPS628681 PCIE_0V8
+   * - PE11
+     - PCIE_VPH_EN
+     - ``pcie_vph_en``, rail ``pcie_vph`` (step 8)
+     - TPS628682 PCIE_1V8
+   * - PG6
+     - PWR_GOOD_5V
+     - ``pwr_good_5v``, rail ``p5v`` (step 1) power good
+     - P5V in regulation (high)
+   * - PC7 / PC6
+     - PG_PH1 / PG_PH2
+     - ``pg_ph1`` / ``pg_ph2``, rail ``vcore_0v8`` (step 2) power good /
+       optional power good
+     - VCORE phases in regulation, high. PG_PH1 gates the step, PG_PH2
+       only warns. PG_PH2 sits at the ~4.4 V LDO; PG_PH1 is clamped by
+       LED DS2 to about 2 V (see Known issues)
+   * - PF10
+     - MPM54304_GPIO
+     - ``mpm54304_gpio``, rail ``mpm54304`` (step 3) power good
+     - MPM54304 power good (open drain with the -0001 MTP, no board
+       pull-up, internal pull-up enabled)
+   * - PG7
+     - PWR_GOOD_LPDDR5
+     - ``pwr_good_lpddr5``, rail ``ddr_vdd`` (step 4) power good
+     - VDD1 and VDD2 good (high, ~3.4 V level)
+   * - PA10
+     - PWR_GOOD_0V9
+     - ``pwr_good_0v9``, rail ``ddr_vdd2l`` (step 5) power good
+     - DDR_VDD2L good (high)
+   * - PG1 / PG2
+     - PWR1_GD_3V3 / PWR2_GD_3V3
+     - ``pwr1_gd_out`` / ``pwr2_gd_out`` + gpio-hogs, rails ``pwr1_gd`` /
+       ``pwr2_gd`` (steps 9 / 10)
+     - Power-good handshakes to the SoC through 15K/18K dividers
+       (push-pull only), raised at step 9 / 10 of a power on
+   * - PF2
+     - OTP_PWRRDY_3V3
+     - ``otp_pwrrdy`` + gpio-hog, rail ``otp_pwrrdy`` (step 11)
+     - OTP power-ready handshake to the SoC through a 15K/18K divider,
+       raised at step 11 of a power on
    * - PF12/PF11/PF13/PF14
      - STM32_JTAG0_TCK/TMS/TDI/TDO
      - ``jtag0_*`` / ``jtagtck`` etc.
@@ -151,74 +214,6 @@ Defined in the DTS, not yet used
      - DTS node
      - Direction
      - Description
-   * - PE13
-     - VCORE_0V8_EN
-     - ``vcore_0v8_en``
-     - Out
-     - TPS546E25 x2 CNTL via J17 (0.8 V, 80 A)
-   * - PE12
-     - MPM54304_EN
-     - ``mpm54304_en``
-     - Out
-     - DVDD_3V3, DVDD_1V8, AVDD_1V8, AVDD_0V8
-   * - PE15
-     - DDR_VDD_EN
-     - ``ddr_vdd_en``
-     - Out
-     - TPS51488 VDD1 1.8 V and VDD2 1.05 V
-   * - PB14
-     - DDR_VDD2L_EN
-     - ``ddr_vdd2l_en``
-     - Out
-     - TPS746 0.9 V (from VDD1)
-   * - PE14
-     - DDR_VDDQ_EN
-     - ``ddr_vddq_en``
-     - Out
-     - TPS51488 VDDQ 0.5 V
-   * - PE10
-     - PCIE_VP_EN
-     - ``pcie_vp_en``
-     - Out
-     - TPS628681 PCIE_0V8
-   * - PE11
-     - PCIE_VPH_EN
-     - ``pcie_vph_en``
-     - Out
-     - TPS628682 PCIE_1V8
-   * - PG6
-     - PWR_GOOD_5V
-     - ``pwr_good_5v``
-     - In
-     - P5V in regulation (high)
-   * - PC7 / PC6
-     - PG_PH1 / PG_PH2
-     - ``pg_ph1`` / ``pg_ph2``
-     - In
-     - VCORE phases in regulation, high. PG_PH2 sits at the ~4.4 V LDO;
-       PG_PH1 is clamped by LED DS2 to about 2 V (see Known issues)
-   * - PG7
-     - PWR_GOOD_LPDDR5
-     - ``pwr_good_lpddr5``
-     - In
-     - VDD1 and VDD2 good (high, ~3.4 V level)
-   * - PA10
-     - PWR_GOOD_0V9
-     - ``pwr_good_0v9``
-     - In
-     - DDR_VDD2L good (high)
-   * - PG1 / PG2
-     - PWR1_GD_3V3 / PWR2_GD_3V3
-     - ``pwr1_gd`` / ``pwr2_gd`` + gpio-hogs
-     - Out
-     - Power-good handshakes to the SoC through 15K/18K dividers
-       (push-pull only), held low
-   * - PF2
-     - OTP_PWRRDY_3V3
-     - ``otp_pwrrdy`` + gpio-hog
-     - Out
-     - OTP power-ready handshake to the SoC through a 15K/18K divider,
-       held low
    * - PG0
      - TJ_MAX_3V3
      - ``tj_max``
@@ -275,12 +270,6 @@ Defined in the DTS, not yet used
      - ``i2c4`` (disabled)
      - 
      - PMIC bus when J67/J68 are jumpered 1-2
-   * - PF10
-     - MPM54304_GPIO
-     - ``mpm54304_gpio``
-     - In
-     - MPM54304 power good (open drain with the -0001 MTP, no board
-       pull-up, internal pull-up enabled)
    * - PF3 / PF4
      - FT4232_GPIO2 / GPIO3
      - ``ft4232_gpio*``
@@ -371,9 +360,11 @@ SYS_RSTN_3V3 (PG5) and FT4232__SYS_RSTN_3V3 (U73 ADBUS4) are diode-ORed
 into Q1, which pulls the SoC RESETN low: **either input high asserts
 reset**. R589 pulls PG5 high, so the SoC is held in reset whenever the MCU
 is unpowered, in reset, or has not configured the pin. WallaBMC maps the
-pin as ``reset-gpio-1`` with ``GPIO_ACTIVE_HIGH``: ``reset_init()`` releases
-the SoC at BMC start and ``reset`` pulses it for one second. SYS_RSTN also
-asserts PERST# on the three PCIe slots through D9-D11. RESETN has an
+pin as ``reset-gpio-1`` with ``GPIO_ACTIVE_HIGH``. ``reset_init()`` drives
+it high at BMC boot, so the SoC stays in reset until ``power on`` releases
+it after the last sequence step. ``power off`` asserts it before the rails
+drop, and ``reset`` pulses it for one second while the host is on. SYS_RSTN
+also asserts PERST# on the three PCIe slots through D9-D11. RESETN has an
 internal pull-up in the SoC.
 
 U73 ADBUS4 has no series resistor or pull-down. It is DTR# in the
@@ -423,7 +414,7 @@ VDD1 > VDD2 > 0.9 V > VDDQ (sheet 44).
      - VCORE_0V8_EN (PE13)
      - U22 + U2 TPS546E25
      - VCORE_0V8 80 A
-     - PG_PH1 (PC7), PG_PH2 (PC6)
+     - PG_PH1 (PC7), PG_PH2 (PC6, optional)
    * - 3
      - MPM54304_EN (PE12)
      - U53 MPM54304
@@ -455,10 +446,20 @@ VDD1 > VDD2 > 0.9 V > VDDQ (sheet 44).
      - PCIE_1V8
      - none (I2C status only)
    * - 9
-     - OTP_PWRRDY (PF2), PWR1_GD (PG1), PWR2_GD (PG2)
-     - 
-     - handshakes to the SoC
-     - 
+     - PWR1_GD (PG1)
+     -
+     - handshake to the SoC
+     -
+   * - 10
+     - PWR2_GD (PG2)
+     -
+     - handshake to the SoC
+     -
+   * - 11
+     - OTP_PWRRDY (PF2)
+     -
+     - handshake to the SoC
+     -
 
 Steps 3 to 8 follow the sheet 56 graph, which does not order the MPM54304,
 DDR and PCIe groups relative to each other; that order must come from the
@@ -473,12 +474,63 @@ As drawn, the printed default ("3-4 short") would tie CNTL to ground, so
 STM32 control needs the VCORE_0V8_EN pin (2 as drawn) linked to a CNTL
 pin; check the real header.
 
-**WallaBMC today** maps only POWER_5V_EN to ``power-gpio-1``; ``power on``
-raises P5V and nothing else, the three handshakes are held low by gpio-hogs,
-and the SoC reset is released at BMC start.
-Bringing the SoC up needs a board-specific sequencer in ``power.c`` that
-walks the table above with power-good waits, drives the handshakes, and
-holds SYS_RSTN until the end. All the GPIO nodes exist in the DTS.
+The rails are the ``wallabmc,power-rail`` nodes in
+``boards/atlantis_slt_mcu.overlay``; ``power-on-sequence`` in its
+``power_sequencer`` node lists them in the table's order and
+``power-off-sequence`` in the reverse. ``power on`` walks the on sequence.
+SYS_RSTN is asserted first.
+Each step waits for its required power-good inputs to read low (a power
+good that is already high before its enable cannot be trusted), asserts
+the enable, waits for the inputs to read high and then sleeps the step's
+settle time. PWR_GOOD_5V gates step 1, PG_PH1 step 2, MPM54304_GPIO
+step 3, PWR_GOOD_LPDDR5 step 4 and PWR_GOOD_0V9 step 5. PG_PH1 is the
+primary TPS546E25's power good and is required so that a VCORE that never
+starts stops the sequence instead of letting the IO rails, the handshakes
+and the reset release go ahead with no core supply; the TPS546E25
+datasheet says PG is actively pulled low while CNTL is low with VCC
+present, so the low reading before the enable is a valid check. PG_PH2 is
+``power-good-optional`` on step 2: it is not checked before the enable and
+a timeout logs ``VCORE_0V8_EN: optional PG_PH2 not good after 1000 ms``
+and continues, because the TPS546E25 datasheet does not say what the
+secondary device's PG pin does in a stacked pair (see Known issues). If
+the LED DS2 clamp makes PC7 read low while VCORE is fine, step 2 fails
+with ``VCORE_0V8_EN: PG_PH1 not good after 1000 ms`` and backs out; VCORE
+is up for that second, long enough to measure PC7. The fix is to remove
+or buffer DS2, or to move ``pg_ph1`` to ``power-good-optional`` in the
+overlay, which leaves VCORE ungated. Steps 6 to 11 have no power-good
+input. Every wait allows 1 s (``power-good-timeout-ms``, polled each
+millisecond). The settle times are 1 ms after VDDQ and 5 ms after each
+PCIe rail, nothing elsewhere; they cover the regulators' own soft-start
+and are placeholders until the SoC power-sequencing specification gives
+real numbers. After step 11 the sequencer releases SYS_RSTN, marks the
+host on and logs ``System Power State changed to: ON``; each step also
+logs ``<ENABLE> on`` at debug level, where ``<ENABLE>`` is the enable's
+DTS label.
+
+A step that times out logs ``<ENABLE>: <PG> still good after 1000 ms`` or
+``<ENABLE>: <PG> not good after 1000 ms``, then ``Power on failed at
+<ENABLE>, powering off``: the rails that came up are taken down in
+``power-off-sequence`` order as for ``power off``, SYS_RSTN stays
+asserted and the error is returned to the shell or Redfish. ``power off``
+asserts SYS_RSTN and walks the off sequence, the reverse of power on.
+Steps 11 to 2 drop with no delay; step 1
+has ``off-delay-ms`` 100, so P5V stays up for 100 ms after the SoC
+regulator enables have dropped. The TPS51488 is powered from P5V and
+needs it while it shuts down: it drops VDD2 as soon as DDR_VDD_EN goes
+low and holds VDD1 for 30 to 60 ms before discharging it (TPS51488
+datasheet). Power off therefore takes about 100 ms. Among the SoC rails
+the order is by enable only and is not timed; the real collapse order is
+set by the regulators and the load. ``power on`` with the host already on
+and ``power off`` with it already off do nothing and log ``System Power
+State already: ON`` (or ``OFF``) instead of ``changed to``. Power cycle is
+off, 2 s, on. One mutex serialises the shell, Redfish and the boot-time
+auto power-on (``config host auto_poweron``), so they cannot interleave.
+The host power state is not persisted across BMC reboots: a BMC reset
+powers the host off, and the sequence runs at boot only when auto power-on
+is enabled. MCUboot's devicetree carries the rail nodes too (the
+sysbuild build shares the application's bindings) but MCUboot has no
+code for them, so only the gpio-hogs act and every enable stays low until
+the application runs.
 
 PMIC I2C
 --------
@@ -588,8 +640,9 @@ MCU drives 3.3 V and 0 V when the pin is low or floating (MCU unpowered or
 in reset). The pins must be push-pull: open drain would never reach a
 high. The shifters' B ports stay attached to the 3.3 V nets, so once
 DVDD_1V8 is up their internal pull-ups lift a floating pin to about 1.5 V
-at the SoC; the gpio-hogs keep the three pins driven low from boot and the
-sequencer must never leave them as inputs.
+at the SoC; the gpio-hogs keep the three pins driven low from boot, in
+MCUboot and the app, and ``power_init()`` reconfigures them as push-pull
+outputs, still low, until steps 9 to 11 of the sequence raise them.
 
 Jumpers and switches
 ====================
@@ -667,8 +720,19 @@ None of these is fixed by firmware.
   roughly 2 V (the LED part is not on the schematic). That is between the
   STM32's design-guaranteed VIH of 1.8 V and its production-tested 2.3 V,
   so PC7 may read low or be noisy while VCORE is fine.
-  PG_PH2 has no LED and is unaffected. Measure before relying on it; the
-  fix is to buffer the LED or remove DS2.
+  PG_PH2 has no LED and is unaffected. The sequencer lists ``pg_ph1`` as
+  ``power-good`` on step 2 so that a VCORE that never starts stops the
+  power on; a bad reading therefore fails step 2 with ``VCORE_0V8_EN:
+  PG_PH1 not good after 1000 ms`` and backs the rails out. VCORE is up
+  for that second, long enough to measure PC7. The fix is to buffer the
+  LED or remove DS2. Until then ``pg_ph1`` can move to
+  ``power-good-optional`` in ``boards/atlantis_slt_mcu.overlay``, which
+  leaves VCORE ungated.
+- **PG_PH2 in the stacked pair**: the TPS546E25 datasheet does not say
+  what the secondary device's PG pin does when two are stacked (over PMBus
+  a secondary always reports power good), so ``pg_ph2`` is
+  ``power-good-optional`` until it is measured. If PC6 follows VCORE, move
+  it to ``power-good`` so both phases gate the step.
 - **SoC held in reset by the USB bridge** (sheets 8, 55): U73 ADBUS4 drives
   the reset OR directly and is DTR#, high unless the host drives it low.
   A J71 cable to a host that has not asserted DTR, or any port close,
@@ -695,14 +759,40 @@ Bring-up checklist
    once it boots.
 #. Check the FT4232 channel A SWD path programs the MCU; J61 is the
    fallback.
-#. Measure PG_PH1 at PC7 with VCORE on, SYS_RSTN and P12V with a USB-C
-   cable on J71 to an idle host (Known issues).
+#. Run ``power on`` and watch the console: ``System Power State changed
+   to: ON`` means all eleven steps passed; ``Power on failed at <ENABLE>,
+   powering off`` names the first rail whose power good did not rise
+   (``<PG> not good``) or was already high (``<PG> still good``). The
+   per-step ``<ENABLE> on`` lines are at debug level.
+#. Measure PG_PH1 at PC7 and PG_PH2 at PC6 with VCORE on. PG_PH1 is
+   required: if PC7 stays low, step 2 fails with ``VCORE_0V8_EN: PG_PH1
+   not good after 1000 ms`` after holding VCORE up for 1 s, long enough
+   to measure. Fix DS2, or move ``pg_ph1`` to ``power-good-optional`` on
+   the ``vcore_0v8`` step in ``boards/atlantis_slt_mcu.overlay``, which
+   leaves VCORE ungated. PG_PH2 only warns; move it to ``power-good`` if
+   PC6 follows VCORE.
+#. Check MPM54304_GPIO (PF10) reads low before MPM54304_EN and high
+   after it. The MPM54304 datasheet says the GPIO pin in PG mode is
+   pulled low while EN is low or in UVLO, so step 3 failing with
+   ``MPM54304_EN: MPM54304_GPIO still good after 1000 ms`` means U53 has
+   no input or the fitted MTP does not configure the GPIO pin as PG;
+   ``not good`` means the rails never came up.
+#. Scope SYS_RSTN across ``power on`` and ``power off``: it must stay high
+   until OTP_PWRRDY has risen and go high again before the enables drop.
+#. Measure SYS_RSTN and P12V with a USB-C cable on J71 to an idle host
+   (Known issues).
 
 Feature work
 ============
 
-#. Power sequencer: ordered enables with power-good waits, handshake
-   outputs, reset held until the end, reverse order on power off.
+#. Monitor the power-good inputs while the host is on and act on a loss
+   (power off, or at least report it); today they are read only during
+   ``power on``.
+#. Timed power-off order once the SoC power-sequencing specification
+   gives numbers; today the enables drop in reverse order with only the
+   100 ms P5V off delay.
+#. Persist the host power state across BMC reboots so the host can be
+   brought back after a BMC reset, which powers it off.
 #. Drive the JTAG mux selects from the JTAG daemon.
 #. TMP117 and EEPROM support on ``i2c2`` (board temperature, identity).
 #. PMBus telemetry over ``i2c4`` when J67/J68 give the bus to the MCU.
