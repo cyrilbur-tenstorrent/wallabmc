@@ -41,22 +41,23 @@
     };
 
     power_rails: power-rails {
+        // ATX PSU main outputs; stays up 10 ms after the DC-DCs go down
+        atx: atx {
+            compatible = "wallabmc,power-rail";
+            enable = <&atxpson>;
+            off-delay-ms = <10>;
+        };
         // Main DC-DC converters (5V/3.3V carrier, 5V SOM/SYS)
         dcdc: dcdc {
             compatible = "wallabmc,power-rail";
             enable = <&dcen>;
         };
-        // ATX PSU main outputs
-        atx: atx {
-            compatible = "wallabmc,power-rail";
-            enable = <&atxpson>;
-        };
     };
 
     power_sequencer: power-sequencer {
         compatible = "wallabmc,power-sequencer";
-        power-on-sequence = <&dcdc &atx>;
-        power-off-sequence = <&atx &dcdc>;
+        power-on-sequence = <&atx &dcdc>;
+        power-off-sequence = <&dcdc &atx>;
     };
 };
 

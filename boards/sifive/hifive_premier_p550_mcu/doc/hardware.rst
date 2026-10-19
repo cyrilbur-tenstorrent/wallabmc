@@ -677,15 +677,15 @@ The MCU controls the board's power-on sequence:
 #. ``power on`` walks ``power-on-sequence`` of the ``power_sequencer`` node
    in ``boards/hifive_premier_p550_mcu.overlay``:
 
-   - Rail ``dcdc``: assert **DC_EN** (PD4 HIGH) -> enables main DC-DC
-     converters (SQ20056RAC for 5V/3.3V carrier, SY81012VDC for 5V SOM/SYS)
    - Rail ``atx``: assert **ATX_PS_ON** (PE3 HIGH) -> tells ATX PSU to turn
      on main 12V
+   - Rail ``dcdc``: assert **DC_EN** (PD4 HIGH) -> enables main DC-DC
+     converters (SQ20056RAC for 5V/3.3V carrier, SY81012VDC for 5V SOM/SYS)
 
 #. **DCDC_PWR_OK** (PE5) goes HIGH when power rails are stable; not read
    yet (see gaps below)
-#. ``power off`` walks ``power-off-sequence``: deassert ATX_PS_ON, then
-   DC_EN
+#. ``power off`` walks ``power-off-sequence``: deassert DC_EN, wait 10 ms
+   (``off-delay-ms`` of ``atx``), then deassert ATX_PS_ON
 #. **Auto power-on jumper** J61 (2-pin) can force power-on at ATX standby
 
 **Original firmware power-on sequence** (from ``hf_power_task`` reverse engineering):
@@ -717,7 +717,6 @@ The MCU controls the board's power-on sequence:
 
 - Does not monitor DCDC_PWR_OK (PE5) to confirm power-on success: needs a
   GPIO node for PE5 listed as ``power-good`` of the ``dcdc`` rail
-- Asserts DC_EN before ATX_PS_ON; the original firmware does the reverse
 - Does not hold SOM in reset during power-on, nor release it after DC good
 - Does not drive front panel LEDs (PD10/PD11) to reflect power state
 - Does not detect power button presses (PA12)
