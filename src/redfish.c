@@ -27,7 +27,7 @@
 
 #include "config.h"
 #include "power.h"
-#include "rtc.h"
+#include "time.h"
 #include "sensors.h"
 #include "vpd.h"
 #include "git_sha.h"
