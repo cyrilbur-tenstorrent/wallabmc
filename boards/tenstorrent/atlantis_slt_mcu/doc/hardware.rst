@@ -174,6 +174,11 @@ Implemented in WallaBMC
      - ``otp_pwrrdy`` + gpio-hog, rail ``otp_pwrrdy`` (step 11)
      - OTP power-ready handshake to the SoC through a 15K/18K divider,
        raised at step 11 of a power on
+   * - PG0
+     - TJ_MAX_3V3
+     - ``tj_max``, ``fault`` of ``power_sequencer``
+     - SoC junction over-temperature output through U61; a rising edge
+       while the host runs powers it off (see Power)
    * - PF12/PF11/PF13/PF14
      - STM32_JTAG0_TCK/TMS/TDI/TDO
      - ``jtag0_*`` / ``jtagtck`` etc.
@@ -214,11 +219,6 @@ Defined in the DTS, not yet used
      - DTS node
      - Direction
      - Description
-   * - PG0
-     - TJ_MAX_3V3
-     - ``tj_max``
-     - In
-     - SoC output, presumably a junction temperature alarm (not documented)
    * - PA3, PA4, PD1, PD0
      - GPIO2/8/11/12_3V3
      - ``soc_gpio*``
@@ -532,6 +532,27 @@ sysbuild build shares the application's bindings) but MCUboot has no
 code for them, so only the gpio-hogs act and every enable stays low until
 the application runs.
 
+**Thermal trip**: TJ_MAX_3V3 (PG0, ``tj_max``) is the SoC's junction
+over-temperature output, listed as a ``fault`` of the ``power_sequencer``
+node. It comes through U61 (see Level shifters): it floats until DVDD_1V8 is
+up and reads high through the shifter's pull-up whenever the SoC does not
+drive it, presumably in reset too (undocumented, see Known issues), so the
+sequencer does not act on its level. After the last step, once SYS_RSTN is
+released, it arms a rising-edge interrupt on PG0 and disarms it again before
+``power off`` or ``reset`` asserts SYS_RSTN. Every rising edge logs
+``TJ_MAX_3V3 asserted, powering off`` and runs the normal power off from a
+thread of its own (the system work queue can be busy with NTP for seconds):
+the handshakes and the SoC enables drop within about a millisecond, P5V 100
+ms later, and ``System Power State changed to: OFF`` follows. ``power on``
+brings the host back. The edge is not qualified by reading the line again,
+because a SoC that resets itself on a trip may stop driving the pin at once.
+PG0 already high when it is armed logs ``TJ_MAX_3V3 asserted at reset
+release`` and does not stop the power on, since that is what the pull-up
+gives before the SoC drives the pin; an alarm already active then is not
+seen until it drops and returns. The polarity is an assumption (see Known
+issues). A pin-0 EXTI line is needed, so no other PA0 to PK0 interrupt can
+be added while ``tj_max`` is a fault.
+
 PMIC I2C
 --------
 
@@ -631,7 +652,9 @@ All TXS0108E/TXS0102 shifters between the SoC and the MCU have their OE
 pulled to DVDD_1V8. Until MPM54304 is enabled, TJ_MAX_3V3 and
 GPIO2/8/11/12_3V3 are undriven on the MCU side; firmware must ignore them
 until DVDD_1V8 is up, and must not add pull-downs (they would fight the
-shifters' internal pull-ups once enabled).
+shifters' internal pull-ups once enabled). Those pull-ups also make
+TJ_MAX_3V3 read high whenever the SoC does not drive it, so the
+sequencer acts only on its edges (see Power).
 
 PWR1_GD, PWR2_GD and OTP_PWRRDY do not go through a shifter: 15K/18K
 dividers (R864-R867 on sheet 46, R870/R871 on sheet 47) replace the
@@ -712,7 +735,8 @@ Flash layout
 Known issues
 ============
 
-None of these is fixed by firmware.
+None of these is fixed by firmware; the TJ_MAX entries need a
+measurement before the DTS can be settled.
 
 - **PG_PH1 level** (sheet 41): the TPS546E25 PG output is pulled up by
   R178 10K to the ~4.4 V LDO but also feeds LED DS2 through R185 1K, so
@@ -744,6 +768,21 @@ None of these is fixed by firmware.
   1.9 V, above the BSS138 threshold, so 12 V may stay off or drop while
   J71 is attached to an idle host. Measure P12V with J71 plugged in; a
   smaller R877 or a Schmitt buffer fixes it.
+- **TJ_MAX polarity** (sheet 5): nothing documents the SoC's TJ_MAX pin.
+  The sequencer assumes it is driven high while the junction is at its
+  maximum temperature and low otherwise. ``TJ_MAX_3V3 asserted at reset
+  release`` on every ``power on`` means the SoC had not started driving the
+  pin when SYS_RSTN was released (U61's pull-up) or the alarm is
+  active low; in the second case the host would be powered off when the
+  alarm clears, not when it starts, and ``tj_max`` in
+  ``atlantis_mcu.dtsi`` needs ``GPIO_ACTIVE_LOW``. Measure PG0 with the
+  SoC running.
+- **TJ_MAX while the SoC is reset behind the BMC's back** (sheets 8, 46):
+  when U73 ADBUS4 resets the SoC with the host on (see above), a SoC
+  that stops driving TJ_MAX lets U61's pull-up raise PG0, which the
+  sequencer would take as a trip. Measure PG0 with the SoC held in reset
+  by DTR#; if it rises, a J71 event ends in a power off until the reset
+  path is fixed.
 
 Bring-up checklist
 ==================
@@ -764,6 +803,15 @@ Bring-up checklist
    powering off`` names the first rail whose power good did not rise
    (``<PG> not good``) or was already high (``<PG> still good``). The
    per-step ``<ENABLE> on`` lines are at debug level.
+#. With the host running, read PG0 (TJ_MAX_3V3): it must be low and
+   ``power on`` must not have logged ``TJ_MAX_3V3 asserted at reset
+   release``; if it did, see Known issues. If the SoC can be made to
+   raise TJ_MAX, check the BMC logs ``TJ_MAX_3V3 asserted, powering off``
+   followed by ``System Power State changed to: OFF``. Also read PG0 with
+   the SoC held in reset through J71 (Known issues). If the host powers
+   off on its own with ``TJ_MAX_3V3 asserted`` in the log and the SoC
+   was not hot, drop ``fault`` from ``power_sequencer`` in
+   ``boards/atlantis_slt_mcu.overlay`` until the cause is found.
 #. Measure PG_PH1 at PC7 and PG_PH2 at PC6 with VCORE on. PG_PH1 is
    required: if PC7 stays low, step 2 fails with ``VCORE_0V8_EN: PG_PH1
    not good after 1000 ms`` after holding VCORE up for 1 s, long enough
@@ -798,3 +846,4 @@ Feature work
 #. PMBus telemetry over ``i2c4`` when J67/J68 give the bus to the MCU.
 #. QSPI flash programming and SD slot S2 access through the muxes.
 #. RTC on the LSE crystal once Y13 is verified.
+#. Report the fault inputs and the last trip in the shell and Redfish.

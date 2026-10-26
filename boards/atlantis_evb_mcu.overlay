@@ -93,6 +93,8 @@
 		power-off-sequence = <&otp_pwrrdy &pwr2_gd &pwr1_gd
 				      &m2 &pcie_vph &pcie_vp &ddr_vddq
 				      &ddr_vdd2l &ddr_vdd &mpm54304 &vcore_0v8 &atx>;
+		/* SoC junction over-temperature: power off at once */
+		fault = <&tj_max>;
 	};
 };
 

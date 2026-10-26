@@ -214,6 +214,11 @@ Implemented in WallaBMC
      - ``otp_pwrrdy`` + gpio-hog, rail ``otp_pwrrdy`` (step 12)
      - OTP power-ready handshake to the SoC through a 15K/18K divider,
        hogged low from MCUboot until step 12
+   * - PG0
+     - TJ_MAX_3V3
+     - ``tj_max``, ``fault`` of ``power_sequencer``
+     - SoC junction over-temperature output through U103; a rising edge
+       while the host runs powers it off (see Power)
    * - PF12/PF11/PF13/PF14
      - STM32_JTAG0_TCK/TMS/TDI/TDO
      - ``jtag0_*`` / ``jtagtck`` etc.
@@ -259,13 +264,6 @@ Defined in the DTS, not yet used
      - ``soc_btm*``
      - Out
      - High forces SoC BOOT_MODE[n] low (see Boot mode)
-   * - PG0
-     - TJ_MAX_3V3
-     - ``tj_max``
-     - In
-     - SoC output through U103, presumably a junction temperature alarm
-       (not documented); the DTS asks for a pull-down for when U103 is
-       high-Z
    * - PA3, PA4, PD1, PD0
      - GPIO2/8/11/12_3V3
      - ``soc_gpio*``
@@ -593,6 +591,26 @@ M2_VCC_EN and the three handshakes still apply in MCUboot and the app,
 so those pins are low from the bootloader until the sequencer
 reconfigures them.
 
+**Thermal trip**: TJ_MAX_3V3 (PG0, ``tj_max``) is the SoC's junction
+over-temperature output, listed as a ``fault`` of the ``power_sequencer``
+node. U103 (see Level shifters) is high-Z while DVDD_1V8 is off, so the DTS
+pull-down holds PG0 low until step 3; after that it repeats the SoC pin,
+whose level in reset is undocumented (see Known issues), so the sequencer
+does not act on the level. After step 12, once SYS_RSTN is released, it arms
+a rising-edge interrupt on PG0 and disarms it again before ``power off`` or
+``reset`` asserts SYS_RSTN. Every rising edge logs ``TJ_MAX_3V3 asserted,
+powering off`` and runs the normal power off from a thread of its own (the
+system work queue can be busy with NTP for seconds): the handshakes and the
+SoC enables drop within about a millisecond, PS_ON 100 ms later, and
+``System Power State changed to: OFF`` follows. ``power on`` brings the host
+back. The edge is not qualified by reading the line again, because a SoC
+that resets itself on a trip may stop driving the pin at once. PG0 already
+high when it is armed logs ``TJ_MAX_3V3 asserted at reset release`` and does
+not stop the power on; an alarm already active then is not seen until it
+drops and returns. The polarity is an assumption (see Known issues). A pin-0
+EXTI line is needed, so no other PA0 to PK0 interrupt can be added while
+``tj_max`` is a fault.
+
 Boot mode
 =========
 
@@ -708,7 +726,8 @@ GPIO2/8/11/12_3V3 go through TXS0108E U61 with OE from DVDD_1V8: undriven
 until MPM54304 is enabled, and no pull-downs (they would fight the
 shifter's pull-ups). TJ_MAX_3V3 comes through SN74AVC4T245 U103, a fixed
 direction push-pull buffer that is high-Z while DVDD_1V8 is off, so the
-DTS gives PG0 a pull-down for whatever reads it. The MCU-facing I2C
+DTS gives PG0 a pull-down and the sequencer's ``fault`` input reads low
+until then (see Power). The MCU-facing I2C
 shifters U105 and U107 have
 their 3.3 V side on D3V3_SB, their 1.8 V side on DVDD_1V8 and OE from
 DVDD_1V8.
@@ -777,8 +796,8 @@ Identical to the SLT: MCUboot in sectors 0-1, NVS storage in sectors 2-3,
 Known issues
 ============
 
-Found while reading Rev 0.95; the first three affect the BMC design, the
-rest are hardware questions.
+Found while reading Rev 0.95; some change the BMC design, the rest are
+hardware questions.
 
 - **No PS_ON latch** (sheet 40): PS_ON# is held only by Q12 from PB10. Any
   MCU reset (reflash, watchdog, debugger reset, MCUboot before GPIO init)
@@ -833,6 +852,29 @@ rest are hardware questions.
   sheet 42 still says "12V->3.3V" although the PCIe regulators run from
   P5V; the PE8 net is spelt SDIO_MUX_en on sheet 32 and SDIO_MUX_EN on
   sheet 27.
+- **TJ_MAX polarity** (sheet 5): nothing documents the SoC's TJ_MAX pin.
+  The sequencer assumes it is driven high while the junction is at its
+  maximum temperature and low otherwise. ``TJ_MAX_3V3 asserted at reset
+  release`` on every ``power on`` means the SoC had not started driving the
+  pin when SYS_RSTN was released (U103 repeating an undriven input) or
+  the alarm is active low; in the second case the host would be powered
+  off when the alarm clears, not when it starts, and the ``&tj_max``
+  override in ``atlantis_evb_mcu.dts`` needs ``GPIO_ACTIVE_LOW`` in
+  place of ``GPIO_ACTIVE_HIGH``. Measure PG0 with the SoC running.
+- **TJ_MAX undriven into U103** (sheet 46): the SN74AVC4T245 has no
+  bus hold and TI requires a driven level on every data input, so
+  whenever the SoC does not drive TJ_MAX with DVDD_1V8 up (for example
+  in reset, including a reset through U73 ADBUS4 with the host on, or
+  if its firmware has to enable the pin first; neither is documented)
+  PG0 is undefined and may toggle, and a rising edge powers the host
+  off. The STM32 pull-down only helps while
+  U103 is unpowered. A pull-down on TJ_MAX_1V8 at the SoC side would
+  give U103 a defined input; until then, if every ``power on`` ends in
+  ``TJ_MAX_3V3 asserted, powering off``, drop ``fault`` from
+  ``power_sequencer`` in ``boards/atlantis_evb_mcu.overlay``. R891 also
+  strapping ``*2OE`` low lets 2B1 glitch while DVDD_1V8 ramps, which the
+  sequencer does not see during a power on (a DVDD_1V8 dropout with the
+  host on would trip it).
 
 Bring-up checklist
 ==================
@@ -862,6 +904,13 @@ Bring-up checklist
    step, then ``System Power State changed to: ON``. A step that fails
    logs ``<enable>: <input> not good after N ms`` and ``Power on failed
    at <enable>, powering off``, and the enables before it go low again.
+#. With the host running, read PG0 (TJ_MAX_3V3): it must be low and
+   ``power on`` must not have logged ``TJ_MAX_3V3 asserted at reset
+   release``; if it did, see Known issues. If the SoC can be made to
+   raise TJ_MAX, check the BMC logs ``TJ_MAX_3V3 asserted, powering off``
+   followed by ``System Power State changed to: OFF``. Also scope PG0
+   with the SoC held in reset through J71 and right after SYS_RSTN is
+   released (Known issues).
 #. Measure PG_PH1/PG_PH2 at PC7/PC6 with VCORE on. PG_PH1 is required:
    if PC7 reads low, step 2 fails after 1 s with
    ``VCORE_0V8_EN: PG_PH1 not good after 1000 ms`` and backs out, so
@@ -892,3 +941,4 @@ Feature work
 #. PMBus telemetry over ``i2c4`` after the R930-R933 rework.
 #. QSPI flash programming and SD slot S2 access through the muxes.
 #. RTC on the LSE crystal once Y13 is verified.
+#. Report the fault inputs and the last trip in the shell and Redfish.
