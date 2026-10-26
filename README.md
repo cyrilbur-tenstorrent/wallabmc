@@ -163,9 +163,10 @@ wss if ``CONFIG_APP_HTTPS`` (e.g., ``wss://wallabmc.local.net/console/host``).
   host CPU so one of the LEDs is a stand-in for a host power GPIO. Boards
   that describe their rails with ``wallabmc,power-rail`` devicetree nodes
   and list them in a ``wallabmc,power-sequencer`` node bring them up and
-  down in that order with power-good checks, and a board with a
-  ``reset-gpio-1`` alias holds the host in reset until the last rail is
-  up; see [the bindings](dts/bindings/).
+  down in that order with power-good checks, power the host off when an
+  input listed as a ``fault`` (such as an over-temperature line) asserts,
+  and, with a ``reset-gpio-1`` alias, hold the host in reset until the
+  last rail is up; see [the bindings](dts/bindings/).
 
 ## Contributing
 
