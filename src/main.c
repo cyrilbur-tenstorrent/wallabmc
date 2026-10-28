@@ -70,7 +70,7 @@ static void print_banner(void)
 static const struct gpio_dt_spec status_led = GPIO_DT_SPEC_GET(STATUS_LED, gpios);
 
 /* LED blinking thread */
-#define LED_BLINK_STACK_SIZE 256
+#define LED_BLINK_STACK_SIZE 384
 #define LED_BLINK_PRIORITY   (CONFIG_NUM_PREEMPT_PRIORITIES - 1)
 #define LED_BLINK_PERIOD_DOT    250
 #define LED_BLINK_PERIOD_DASH   (3 * LED_BLINK_PERIOD_DOT)
