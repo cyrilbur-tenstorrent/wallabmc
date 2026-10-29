@@ -132,6 +132,13 @@ int restart_dhcp4(void)
 	return 0;
 }
 
+int restart_dhcp4_iface(struct net_if *iface)
+{
+	restart_dhcpv4_client(iface, NULL);
+
+	return 0;
+}
+
 int stop_dhcp4(void)
 {
 	net_if_foreach(stop_dhcpv4_client, NULL);
