@@ -539,7 +539,7 @@ sequencer does not act on its level. After the last step, once SYS_RSTN is
 released, it arms a rising-edge interrupt on PG0 and disarms it again before
 ``power off`` or ``reset`` asserts SYS_RSTN. Every rising edge logs
 ``TJ_MAX_3V3 asserted, powering off`` and runs the normal power off from a
-thread of its own (the system work queue can be busy with NTP for seconds):
+thread of its own (the blocking workqueue can be busy with NTP for seconds):
 the handshakes and the SoC enables drop within about a millisecond, P5V 100
 ms later, and ``System Power State changed to: OFF`` follows. ``power on``
 brings the host back. The edge is not qualified by reading the line again,

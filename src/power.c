@@ -60,6 +60,16 @@ struct power_rail {
 	const char *name;
 };
 
+/*
+ * An input the host asserts to demand an immediate power off, such as a
+ * junction over-temperature line. Armed only while the host runs.
+ */
+struct power_fault {
+	struct gpio_dt_spec gpio;
+	const char *name;
+	struct gpio_callback cb;
+};
+
 #define GPIO_NAME(node) DT_PROP_OR(node, label, DT_NODE_FULL_NAME(node))
 
 #define RAIL(node) UTIL_CAT(power_rail_, DT_DEP_ORD(node))
@@ -97,13 +107,29 @@ DT_FOREACH_STATUS_OKAY(wallabmc_power_rail, RAIL_DEFINE)
 
 #define SEQUENCE_RAIL(node, prop, idx) &RAIL(DT_PHANDLE_BY_IDX(node, prop, idx)),
 
-#define POWER_SEQUENCE(node, prop) DT_FOREACH_PROP_ELEM(node, prop, SEQUENCE_RAIL)
+#define FAULT_DEFINE(node, prop, idx)						\
+	{ .gpio = GPIO_DT_SPEC_GET(DT_PHANDLE_BY_IDX(node, prop, idx), gpios),	\
+	  .name = GPIO_NAME(DT_PHANDLE_BY_IDX(node, prop, idx)) },
 
-/* Empty on a board without a sequencer */
+#define POWER_SEQUENCE(node, prop) DT_FOREACH_PROP_ELEM(node, prop, SEQUENCE_RAIL)
+#define POWER_FAULTS(node)							\
+	COND_CODE_1(DT_NODE_HAS_PROP(node, fault),				\
+		(DT_FOREACH_PROP_ELEM(node, fault, FAULT_DEFINE)), ())
+
+/* Both lists are empty on a board without a sequencer */
 static const struct power_rail *const power_on_sequence[] = {
 	DT_FOREACH_STATUS_OKAY_VARGS(wallabmc_power_sequencer, POWER_SEQUENCE,
 				     power_on_sequence)
 };
+
+static struct power_fault power_faults[] = {
+	DT_FOREACH_STATUS_OKAY(wallabmc_power_sequencer, POWER_FAULTS)
+};
+
+BUILD_ASSERT(ARRAY_SIZE(power_faults) <= 32, "too many fault inputs");
+
+/* Faults seen by the interrupt handler and not yet acted on, by index */
+static atomic_t fault_pending;
 
 static const struct gpio_dt_spec power_led_gpio =
 #if DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED)
@@ -152,7 +178,9 @@ static const struct gpio_dt_spec power_good_gpio = { 0 };
  *
  * Taken by the public entry points. The static power_on(),
  * power_off(), force_off() and power_pulse() workers assume it is
- * held. host_power_state() is deliberately lock-free.
+ * held. host_power_state() is deliberately lock-free. The fault work
+ * queue is the one caller that waits for the lock: a power off the
+ * host demanded must not be refused because the shell is busy.
  */
 static K_MUTEX_DEFINE(host_power_mutex);
 
@@ -245,8 +273,88 @@ static int reset_set(int value)
 	return ret;
 }
 
+static int power_off(void);
+
+/*
+ * The power off runs on its own queue: the blocking workqueue can be
+ * busy with NTP for seconds, and a hot host cannot wait that long.
+ */
+static void fault_work_fn(struct k_work *work)
+{
+	uint32_t pending;
+	int ret, i;
+
+	k_mutex_lock(&host_power_mutex, K_FOREVER);
+
+	/* Nothing pending means the host was powered off since the edge */
+	pending = atomic_clear(&fault_pending);
+	for (i = 0; i < ARRAY_SIZE(power_faults); i++) {
+		if (pending & BIT(i))
+			LOG_ERR("%s asserted, powering off", power_faults[i].name);
+	}
+
+	if (pending) {
+		ret = power_off();
+		if (ret < 0)
+			LOG_ERR("Failed to set power state: %d", ret);
+	}
+
+	k_mutex_unlock(&host_power_mutex);
+}
+
+static K_WORK_DEFINE(fault_work, fault_work_fn);
+static struct k_work_q fault_workq;
+static K_KERNEL_STACK_DEFINE(fault_stack, 1024);
+
+static void fault_isr(const struct device *dev, struct gpio_callback *cb,
+		      uint32_t pins)
+{
+	struct power_fault *fault = CONTAINER_OF(cb, struct power_fault, cb);
+
+	atomic_or(&fault_pending, BIT(fault - power_faults));
+	k_work_submit_to_queue(&fault_workq, &fault_work);
+}
+
+/*
+ * The fault inputs are undriven or meaningless while the host is off or
+ * in reset, so they are armed only in between. Callers hold
+ * host_power_mutex. An edge during the few instructions of a disarm can
+ * stay pending in the interrupt controller and fire at the next arm.
+ */
+static int faults_arm(bool arm)
+{
+	int ret = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(power_faults); i++) {
+		const struct power_fault *fault = &power_faults[i];
+		int rc;
+
+		rc = gpio_pin_interrupt_configure_dt(&fault->gpio,
+				arm ? GPIO_INT_EDGE_TO_ACTIVE : GPIO_INT_DISABLE);
+		if (rc < 0) {
+			LOG_ERR("Could not %s %s: %d", arm ? "arm" : "disarm",
+				fault->name, rc);
+			ret = rc;
+		}
+
+		if (arm) {
+			rc = gpio_pin_get_dt(&fault->gpio);
+			if (rc < 0) {
+				LOG_ERR("Could not read %s: %d", fault->name, rc);
+				ret = rc;
+			} else if (rc > 0) {
+				LOG_WRN("%s asserted at reset release", fault->name);
+			}
+		}
+	}
+
+	/* Not the errno: -EBUSY from the driver is not a busy sequencer */
+	return ret < 0 ? -EIO : 0;
+}
+
 #ifdef CONFIG_APP_HOST_POWER_PULSE
-BUILD_ASSERT(ARRAY_SIZE(power_on_sequence) == 0,
+BUILD_ASSERT(ARRAY_SIZE(power_on_sequence) == 0 && ARRAY_SIZE(power_faults) == 0,
 	     "a momentary power button cannot drive a wallabmc,power-sequencer");
 
 /* Drive every power GPIO to val; try them all so one failure cannot leave another asserted */
@@ -496,6 +604,16 @@ static int power_on(void)
 		return ret;
 	}
 
+	/* A host that cannot be watched is not left running */
+	ret = faults_arm(true);
+	if (ret < 0) {
+		faults_arm(false);
+		atomic_clear(&fault_pending);
+		reset_set(1);
+		rails_off();
+		return ret;
+	}
+
 	/* Don't fail the operation on LED failure */
 	(void)power_led_set(1);
 	system_power_state = true;
@@ -513,6 +631,14 @@ static int power_off(void)
 	 * power-on back-out can leave an enable asserted, and this is the
 	 * retry.
 	 */
+
+	/*
+	 * Rails going away would look like faults, and whatever fired before
+	 * now is about the host that is going. A reset disarms too but keeps
+	 * what is pending: that host stays on.
+	 */
+	faults_arm(false);
+	atomic_clear(&fault_pending);
 
 	/* Assert reset before the rails go away */
 	ret = reset_set(1);
@@ -683,6 +809,35 @@ int power_init(void)
 				return -1;
 			}
 		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(power_faults); i++) {
+		struct power_fault *fault = &power_faults[i];
+
+		if (!gpio_is_ready_dt(&fault->gpio)) {
+			LOG_INF("Fault GPIO %s not ready\n", fault->name);
+			return -1;
+		}
+
+		if (gpio_pin_configure_dt(&fault->gpio, GPIO_INPUT) < 0 ||
+		    gpio_pin_interrupt_configure_dt(&fault->gpio, GPIO_INT_DISABLE) < 0) {
+			LOG_INF("Could not configure fault GPIO %s\n", fault->name);
+			return -1;
+		}
+
+		gpio_init_callback(&fault->cb, fault_isr, BIT(fault->gpio.pin));
+		if (gpio_add_callback_dt(&fault->gpio, &fault->cb) < 0) {
+			LOG_INF("Could not watch fault GPIO %s\n", fault->name);
+			return -1;
+		}
+	}
+
+	if (ARRAY_SIZE(power_faults) > 0) {
+		k_work_queue_start(&fault_workq, fault_stack,
+				   K_KERNEL_STACK_SIZEOF(fault_stack),
+				   CONFIG_SYSTEM_WORKQUEUE_PRIORITY - 1, NULL);
+		k_thread_name_set(k_work_queue_thread_get(&fault_workq),
+				  "power_fault");
 	}
 
 	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
@@ -927,9 +1082,15 @@ int power_reset(void)
 	if (state < 0)
 		LOG_WRN("Host power state unknown; pulsing reset anyway");
 
+	/* The host does not drive its fault outputs in reset */
+	faults_arm(false);
+
 	ret = reset_set(1);
-	if (ret < 0)
+	if (ret < 0) {
+		if (faults_arm(true) < 0)
+			power_off();
 		goto out;
+	}
 
 	if (DT_NODE_HAS_STATUS_OKAY(GPIO_POWER_LED) &&
 	    gpio_is_ready_dt(&power_led_gpio)) {
@@ -944,6 +1105,12 @@ int power_reset(void)
 	}
 
 	ret = reset_set(0);
+	if (ret < 0)
+		goto out;
+
+	ret = faults_arm(true);
+	if (ret < 0)
+		power_off();
 out:
 	k_mutex_unlock(&host_power_mutex);
 	return ret;

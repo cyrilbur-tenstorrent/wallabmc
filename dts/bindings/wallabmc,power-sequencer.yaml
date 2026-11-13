@@ -12,13 +12,15 @@ description: |
   the rails listed after it. A failed power on is backed out the same way,
   rails that never came up included. The host reset GPIO (alias
   reset-gpio-1), if there is one, is asserted before the first rail comes
-  up and released after the last.
+  up and released after the last. The fault inputs are watched while the
+  host runs; one going active powers the host off.
 
   Example:
 
     power_sequencer: power-sequencer {
         compatible = "wallabmc,power-sequencer";
         power-on-sequence = <&p5v &vcore>;
+        fault = <&tj_max>;
     };
 
 compatible: "wallabmc,power-sequencer"
@@ -32,3 +34,15 @@ properties:
     description: |
       The wallabmc,power-rail nodes in power-on order. Power off walks
       the list in reverse.
+
+  fault:
+    type: phandles
+    description: |
+      Nodes with a gpios property that the host drives active to demand
+      an immediate power off, such as a junction over-temperature line.
+      Each is armed as an edge interrupt once the last rail is up and the
+      host reset is released, and disarmed before the host is reset or
+      powered off, so the level while the host is off or in reset does
+      not matter. Every edge logs an error and powers the host off.
+      The pin must be able to interrupt (on STM32 no other interrupt may
+      use the same pin number); if arming fails the power on backs out.
